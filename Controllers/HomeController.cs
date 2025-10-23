@@ -23,17 +23,24 @@ namespace HISWEBAPI.Controllers
             _distributedCache = distributedCache;
         }
 
-        [HttpGet("login")]
-        public async Task<IActionResult> UserLogin(int branchId, string userName, string password)
+        [HttpPost("login")]
+        public async Task<IActionResult> UserLogin([FromBody] LoginModel loginRequest)
         {
             try
             {
-                var loginDetails = await _repository.UserLoginAsync(branchId, userName, password);
+                if (loginRequest == null)
+                    return BadRequest(new {  Message = "Invalid request." });
+
+                var loginDetails = await _repository.UserLoginAsync(
+                    loginRequest.BranchId,
+                    loginRequest.UserName,
+                    loginRequest.Password
+                );
 
                 if (loginDetails == null || !loginDetails.Any())
-                    return Unauthorized(new { Message = "Invalid credentials." });
+                    return Unauthorized(new { result = false, Message = "Invalid credentials." });
 
-                return Ok(new { Data = loginDetails });
+                return Ok(new { result = true, Message = "Login successful" });
             }
             catch (Exception ex)
             {
@@ -44,5 +51,6 @@ namespace HISWEBAPI.Controllers
                 });
             }
         }
+
     }
 }
