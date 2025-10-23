@@ -23,13 +23,38 @@ namespace HISWEBAPI.Controllers
             _distributedCache = distributedCache;
         }
 
+        [HttpGet("getActiveBranch")]
+        public async Task<ActionResult<IEnumerable<BranchModel>>> GetActiveBranchDetails()
+        {
+            List<BranchModel> branchDetails = new List<BranchModel>();
+
+            try
+            {
+                var itemsFromRepo = await _repository.getActiveBranchListAsync();
+                branchDetails = itemsFromRepo.ToList();
+                string serializedList = JsonConvert.SerializeObject(branchDetails);
+
+                return Ok(branchDetails);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    Message = "An error occurred while fetching service items.",
+                    Error = ex.Message
+                });
+            }
+        }
+
+
+
         [HttpPost("login")]
         public async Task<IActionResult> UserLogin([FromBody] LoginModel loginRequest)
         {
             try
             {
                 if (loginRequest == null)
-                    return BadRequest(new {  Message = "Invalid request." });
+                    return BadRequest(new { Message = "Invalid request." });
 
                 var loginDetails = await _repository.UserLoginAsync(
                     loginRequest.BranchId,

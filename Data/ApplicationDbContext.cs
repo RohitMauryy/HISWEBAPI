@@ -11,10 +11,12 @@ namespace HISWEBAPI.Data
         }
 
         public DbSet<LoginModel> LoginDetails { get; set; }
+        public DbSet<BranchModel> BranchDetails { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<LoginModel>().HasNoKey(); // 👈 Add this line
+            modelBuilder.Entity<LoginModel>().HasNoKey(); 
+            modelBuilder.Entity<BranchModel>().HasNoKey();
             base.OnModelCreating(modelBuilder);
         }
     }

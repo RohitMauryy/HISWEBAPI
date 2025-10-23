@@ -16,6 +16,14 @@ namespace HISWEBAPI.Repositories
             _dbContext = dbContext;
         }
 
+        public async Task<IEnumerable<BranchModel>> getActiveBranchListAsync()
+        {
+            // Use strongly typed DbSet
+            return await _dbContext.BranchDetails
+                .FromSqlRaw("EXEC [dbo].[S_GetActiveBranchList]")
+                .ToListAsync();
+        }
+
         public async Task<IEnumerable<LoginModel>> UserLoginAsync(int branchId, string userName, string password)
         {
             var result = await _dbContext.LoginDetails
