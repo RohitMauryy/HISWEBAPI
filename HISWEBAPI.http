@@ -1,6 +1,21 @@
+# ============================================
+# HomeController API Requests
+# ============================================
+
 @HISWEBAPI_HostAddress = http://localhost:5257
 
-GET {{HISWEBAPI_HostAddress}}/weatherforecast/
+### Get Active Branch List
+GET {{HISWEBAPI_HostAddress}}/api/home/getActiveBranchList
 Accept: application/json
 
-###
+### User Login
+POST {{HISWEBAPI_HostAddress}}/api/home/login
+Content-Type: application/json
+
+{
+    "BranchId": 0,
+    "UserName": "string",
+    "Password": "string"
+}
+
+
