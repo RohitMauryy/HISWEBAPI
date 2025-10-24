@@ -49,10 +49,13 @@ namespace HISWEBAPI.Controllers
             }
             catch (Exception ex)
             {
-                log.Error("Exception in GetActiveBranchListAsync controller.", ex);
-                LogErrors.writeErrorLog(ex, $"{MethodBase.GetCurrentMethod().ReflectedType}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, $"Internal server error: {ex.Message}");
+                // Log full error details (location, stack, inner exceptions, etc.)
+                LogErrors.WriteErrorLog(ex, $"{MethodBase.GetCurrentMethod().ReflectedType}.{MethodBase.GetCurrentMethod().Name}");
+
+                // Return standardized HTTP 500 response
+                return StatusCode(500, new { result = false, message = "An unexpected error occurred." });
             }
+
         }
 
         [HttpPost("login")]
@@ -82,10 +85,13 @@ namespace HISWEBAPI.Controllers
             }
             catch (Exception ex)
             {
-                log.Error("Exception in UserLoginAsync controller.", ex);
-                LogErrors.writeErrorLog(ex, $"{MethodBase.GetCurrentMethod().ReflectedType}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = ex.Message });
+                // Log full error details (location, stack, inner exceptions, etc.)
+                LogErrors.WriteErrorLog(ex, $"{MethodBase.GetCurrentMethod().ReflectedType}.{MethodBase.GetCurrentMethod().Name}");
+
+                // Return standardized HTTP 500 response
+                return StatusCode(500, new { result = false, message = "An unexpected error occurred." });
             }
+
         }
 
     }

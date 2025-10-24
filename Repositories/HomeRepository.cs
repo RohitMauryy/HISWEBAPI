@@ -23,7 +23,7 @@ namespace HISWEBAPI.Repositories
             using (var conn = GetConnection())
             {
                 await conn.OpenAsync();
-                using (var cmd = new SqlCommand("S_GetActiveBranchList", conn))
+                using (var cmd = new SqlCommand("S_GetActiveBranchList55", conn))
                 {
                     cmd.CommandType = CommandType.StoredProcedure;
 

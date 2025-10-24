@@ -3,22 +3,51 @@ using HISWEBAPI.Repositories;
 using Microsoft.EntityFrameworkCore;
 using log4net;
 using log4net.Config;
+using log4net.Repository.Hierarchy;
+using log4net.Core;
 using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure log4net
-var logFolder = Path.Combine(AppContext.BaseDirectory, "Logs");
-if (!Directory.Exists(logFolder))
-    Directory.CreateDirectory(logFolder);
+// ---------------------------
+// Read Logging Flags from appsettings.json
+// ---------------------------
+bool enableInfoLog = builder.Configuration.GetValue<bool>("LoggingFlags:EnableInfoLog");
+bool enableWarnLog = builder.Configuration.GetValue<bool>("LoggingFlags:EnableWarnLog");
+bool enableErrorLog = builder.Configuration.GetValue<bool>("LoggingFlags:EnableErrorLog");
 
+// ---------------------------
+// Configure log4net
+// ---------------------------
 var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
 XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
 var logger = LogManager.GetLogger(typeof(Program));
 
+// Adjust root logger level dynamically based on flags
+if (logRepository is log4net.Repository.Hierarchy.Hierarchy hierarchy)
+{
+    var root = hierarchy.Root;
+
+    // Default to OFF
+    root.Level = Level.Off;
+
+    // Determine highest level to enable based on flags
+    if (enableInfoLog)
+        root.Level = Level.Info;
+    else if (enableWarnLog)
+        root.Level = Level.Warn;
+    else if (enableErrorLog)
+        root.Level = Level.Error;
+
+    hierarchy.RaiseConfigurationChanged(EventArgs.Empty);
+}
+
+
 logger.Info("Application starting...");
 
+// ---------------------------
 // CORS setup
+// ---------------------------
 var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
 builder.Services.AddCors(options =>
 {
@@ -31,19 +60,23 @@ builder.Services.AddCors(options =>
         });
 });
 
-// Add repository
+// ---------------------------
+// Dependency Injection
+// ---------------------------
 builder.Services.AddScoped<IHomeRepository, HomeRepository>();
 
-// Add Redis cache
+// ---------------------------
+// Redis Cache
+// ---------------------------
 builder.Services.AddDistributedRedisCache(options =>
 {
-    options.Configuration = "localhost:6379"; // Your Redis server
+    options.Configuration = "localhost:6379"; // Redis server
 });
 
-// Add controllers
+// ---------------------------
+// Controllers and Swagger
+// ---------------------------
 builder.Services.AddControllers();
-
-// Swagger setup
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -51,7 +84,9 @@ var app = builder.Build();
 
 logger.Info("Application built successfully");
 
-// Middleware configuration
+// ---------------------------
+// Middleware
+// ---------------------------
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -59,15 +94,13 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-// Use CORS
 app.UseCors(MyAllowSpecificOrigins);
-
 app.UseAuthorization();
-
-// Map controllers
 app.MapControllers();
 
+// ---------------------------
+// Run Application
+// ---------------------------
 try
 {
     logger.Info("Starting app...");
