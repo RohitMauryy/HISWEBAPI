@@ -30,7 +30,7 @@ namespace HISWEBAPI.Controllers
 
             try
             {
-                var itemsFromRepo = await _repository.getActiveBranchListAsync();
+                var itemsFromRepo = await _repository.GetActiveBranchListAsync();
                 branchDetails = itemsFromRepo.ToList();
                 string serializedList = JsonConvert.SerializeObject(branchDetails);
 
@@ -40,7 +40,7 @@ namespace HISWEBAPI.Controllers
             {
                 return StatusCode(500, new
                 {
-                    Message = "An error occurred while fetching service items.",
+                    Message = "An error occurred while fetching Branch Details.",
                     Error = ex.Message
                 });
             }
@@ -54,28 +54,42 @@ namespace HISWEBAPI.Controllers
             try
             {
                 if (loginRequest == null)
-                    return BadRequest(new { Message = "Invalid request." });
+                    return BadRequest(new { isSuccess = false, message = "Invalid request." });
 
-                var loginDetails = await _repository.UserLoginAsync(
+                // Call repository method that returns a long (userId or 0 if invalid)
+                long userId = await _repository.UserLoginAsync(
                     loginRequest.BranchId,
                     loginRequest.UserName,
                     loginRequest.Password
                 );
 
-                if (loginDetails == null || !loginDetails.Any())
-                    return Unauthorized(new { result = false, Message = "Invalid credentials." });
+                if (userId <= 0)
+                {
+                    return Unauthorized(new
+                    {
+                        isSuccess = false,
+                        message = "Invalid credentials."
+                    });
+                }
 
-                return Ok(new { result = true, Message = "Login successful" });
+                return Ok(new
+                {
+                    isSuccess = true,
+                    message = "Login successful.",
+                    userId = userId
+                });
             }
             catch (Exception ex)
             {
                 return StatusCode(500, new
                 {
-                    Message = "An error occurred while logging in.",
-                    Error = ex.Message
+                    isSuccess = false,
+                    message = "An error occurred while logging in.",
+                    error = ex.Message
                 });
             }
         }
+
 
     }
 }

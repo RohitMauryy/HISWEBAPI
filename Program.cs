@@ -1,4 +1,3 @@
-using HISWEBAPI.Data;
 using HISWEBAPI.Interface;
 using HISWEBAPI.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -12,15 +11,12 @@ builder.Services.AddCors(options =>
     options.AddPolicy(name: MyAllowSpecificOrigins,
         policy =>
         {
-            policy.WithOrigins("http://localhost:3000")
+            policy.WithOrigins("http://localhost:5173")
                   .AllowAnyHeader()
                   .AllowAnyMethod();
         });
 });
 
-// Add SQL Server DbContext
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Add repository
 builder.Services.AddScoped<IHomeRepository, HomeRepository>();
