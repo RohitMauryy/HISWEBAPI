@@ -2,7 +2,7 @@
 # HomeController API Requests
 # ============================================
 
-@HISWEBAPI_HostAddress = http://localhost:5257
+@HISWEBAPI_HostAddress = http://localhost:11350
 
 ### Get Active Branch List
 GET {{HISWEBAPI_HostAddress}}/api/home/getActiveBranchList

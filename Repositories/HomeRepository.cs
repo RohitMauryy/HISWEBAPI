@@ -34,7 +34,7 @@ namespace HISWEBAPI.Repositories
                             branches.Add(new BranchModel
                             {
                                 branchId = Convert.ToInt32(reader["BranchId"]),
-                                branchName = reader["BranchName"].ToString()
+                                branchName = (string)reader["BranchName"]
                             });
                         }
                     }
