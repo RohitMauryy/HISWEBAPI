@@ -49,16 +49,13 @@ namespace HISWEBAPI.Controllers
             }
             catch (Exception ex)
             {
-                // Log full error details (location, stack, inner exceptions, etc.)
                 LogErrors.WriteErrorLog(ex, $"{MethodBase.GetCurrentMethod().ReflectedType}.{MethodBase.GetCurrentMethod().Name}");
-
-                // Return standardized HTTP 500 response
-                return StatusCode(500, new { result = false, message = "An unexpected error occurred." });
+                return StatusCode(500, new { result = false, message = "Server Error found" });
             }
 
         }
 
-        [HttpPost("login")]
+        [HttpPost("userLogin")]
         public async Task<IActionResult> UserLoginAsync([FromBody] DTO.LoginRequest request)
         {
             log.Info($"UserLoginAsync called. BranchId={request.BranchId}, UserName={request.UserName}");
@@ -85,11 +82,8 @@ namespace HISWEBAPI.Controllers
             }
             catch (Exception ex)
             {
-                // Log full error details (location, stack, inner exceptions, etc.)
                 LogErrors.WriteErrorLog(ex, $"{MethodBase.GetCurrentMethod().ReflectedType}.{MethodBase.GetCurrentMethod().Name}");
-
-                // Return standardized HTTP 500 response
-                return StatusCode(500, new { result = false, message = "An unexpected error occurred." });
+                return StatusCode(500, new { result = false, message = "Server Error found" });
             }
 
         }
