@@ -1,12 +1,16 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using HISWEBAPI.Models;
+﻿using HISWEBAPI.Models;
 using HISWEBAPI.Interface;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using HISWEBAPI.DTO;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Distributed;
 using Newtonsoft.Json;
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Threading.Tasks;
+using log4net;
+using HISWEBAPI.GWT.PMS.Exceptions.Log;
+using Microsoft.AspNetCore.Identity.Data;
 
 namespace HISWEBAPI.Controllers
 {
@@ -16,6 +20,7 @@ namespace HISWEBAPI.Controllers
     {
         private readonly IHomeRepository _repository;
         private readonly IDistributedCache _distributedCache;
+        private static readonly ILog log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         public HomeController(IHomeRepository repository, IDistributedCache distributedCache)
         {
@@ -23,73 +28,65 @@ namespace HISWEBAPI.Controllers
             _distributedCache = distributedCache;
         }
 
-        [HttpGet("getActiveBranch")]
-        public async Task<ActionResult<IEnumerable<BranchModel>>> GetActiveBranchDetails()
+        [HttpGet("getActiveBranchList")]
+        public async Task<IActionResult> GetActiveBranchListAsync()
         {
-            List<BranchModel> branchDetails = new List<BranchModel>();
+            log.Info("GetActiveBranchListAsync called in controller.");
 
             try
             {
-                var itemsFromRepo = await _repository.GetActiveBranchListAsync();
-                branchDetails = itemsFromRepo.ToList();
-                string serializedList = JsonConvert.SerializeObject(branchDetails);
+                var branches = await _repository.GetActiveBranchListAsync();
 
-                return Ok(branchDetails);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new
+                if (branches == null)
                 {
-                    Message = "An error occurred while fetching Branch Details.",
-                    Error = ex.Message
-                });
-            }
-        }
-
-
-
-        [HttpPost("login")]
-        public async Task<IActionResult> UserLogin([FromBody] LoginModel loginRequest)
-        {
-            try
-            {
-                if (loginRequest == null)
-                    return BadRequest(new { isSuccess = false, message = "Invalid request." });
-
-                // Call repository method that returns a long (userId or 0 if invalid)
-                long userId = await _repository.UserLoginAsync(
-                    loginRequest.BranchId,
-                    loginRequest.UserName,
-                    loginRequest.Password
-                );
-
-                if (userId <= 0)
-                {
-                    return Unauthorized(new
-                    {
-                        isSuccess = false,
-                        message = "Invalid credentials."
-                    });
+                    log.Warn("No branches found.");
+                    return NotFound("No active branches found.");
                 }
 
-                return Ok(new
-                {
-                    isSuccess = true,
-                    message = "Login successful.",
-                    userId = userId
-                });
+              
+                log.Info($"Branches fetched, Count: {branches.Count()}");
+                return Ok(branches);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new
-                {
-                    isSuccess = false,
-                    message = "An error occurred while logging in.",
-                    error = ex.Message
-                });
+                log.Error("Exception in GetActiveBranchListAsync controller.", ex);
+                LogErrors.writeErrorLog(ex, $"{MethodBase.GetCurrentMethod().ReflectedType}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, $"Internal server error: {ex.Message}");
             }
         }
 
+        [HttpPost("login")]
+        public async Task<IActionResult> UserLoginAsync([FromBody] DTO.LoginRequest request)
+        {
+            log.Info($"UserLoginAsync called. BranchId={request.BranchId}, UserName={request.UserName}");
+
+            try
+            {
+                var userId = await _repository.UserLoginAsync(request.BranchId, request.UserName, request.Password);
+
+                if (userId > 0)
+                {
+                    log.Info($"User login successful. UserId={userId}");
+                    return Ok(new { result = true, userId });
+                }
+                else if (userId == 0)
+                {
+                    log.Warn("Invalid credentials.");
+                    return Unauthorized(new { result = false, message = "Invalid credentials." });
+                }
+                else
+                {
+                    log.Error("Internal error during login.");
+                    return StatusCode(500, new { result = false, message = "Internal server error." });
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error("Exception in UserLoginAsync controller.", ex);
+                LogErrors.writeErrorLog(ex, $"{MethodBase.GetCurrentMethod().ReflectedType}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = ex.Message });
+            }
+        }
 
     }
 }

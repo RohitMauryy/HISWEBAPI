@@ -15,9 +15,7 @@ namespace HISWEBAPI.Repositories
         {
         }
 
-        /// <summary>
-        /// Fetch active branch list from the database.
-        /// </summary>
+       
         public async Task<IEnumerable<BranchModel>> GetActiveBranchListAsync()
         {
             var branches = new List<BranchModel>();
@@ -25,7 +23,6 @@ namespace HISWEBAPI.Repositories
             using (var conn = GetConnection())
             {
                 await conn.OpenAsync();
-
                 using (var cmd = new SqlCommand("S_GetActiveBranchList", conn))
                 {
                     cmd.CommandType = CommandType.StoredProcedure;
@@ -47,15 +44,12 @@ namespace HISWEBAPI.Repositories
             return branches;
         }
 
-        /// <summary>
-        /// Validate user credentials and return UserId if valid.
-        /// </summary>
+      
         public async Task<long> UserLoginAsync(int branchId, string userName, string password)
         {
             using (var conn = GetConnection())
             {
                 await conn.OpenAsync();
-
                 using (var cmd = new SqlCommand("sp_S_Login", conn))
                 {
                     cmd.CommandType = CommandType.StoredProcedure;
@@ -66,11 +60,9 @@ namespace HISWEBAPI.Repositories
                     var result = await cmd.ExecuteScalarAsync();
 
                     if (result != null && long.TryParse(result.ToString(), out long userId))
-                    {
-                        return userId; // Login success — return UserId or status code
-                    }
+                        return userId;
 
-                    return 0; // Invalid credentials or no data found
+                    return 0; // invalid credentials
                 }
             }
         }

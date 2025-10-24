@@ -1,8 +1,22 @@
 using HISWEBAPI.Interface;
 using HISWEBAPI.Repositories;
 using Microsoft.EntityFrameworkCore;
+using log4net;
+using log4net.Config;
+using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure log4net
+var logFolder = Path.Combine(AppContext.BaseDirectory, "Logs");
+if (!Directory.Exists(logFolder))
+    Directory.CreateDirectory(logFolder);
+
+var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
+XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
+var logger = LogManager.GetLogger(typeof(Program));
+
+logger.Info("Application starting...");
 
 // CORS setup
 var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
@@ -16,7 +30,6 @@ builder.Services.AddCors(options =>
                   .AllowAnyMethod();
         });
 });
-
 
 // Add repository
 builder.Services.AddScoped<IHomeRepository, HomeRepository>();
@@ -36,6 +49,8 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+logger.Info("Application built successfully");
+
 // Middleware configuration
 if (app.Environment.IsDevelopment())
 {
@@ -53,4 +68,13 @@ app.UseAuthorization();
 // Map controllers
 app.MapControllers();
 
-app.Run();
+try
+{
+    logger.Info("Starting app...");
+    app.Run();
+}
+catch (Exception ex)
+{
+    logger.Error("Application failed to start", ex);
+    throw;
+}
