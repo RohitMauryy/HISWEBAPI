@@ -1,16 +1,11 @@
-﻿using HISWEBAPI.Models;
-using HISWEBAPI.Interface;
-using HISWEBAPI.DTO;
+﻿using HISWEBAPI.Interface;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Distributed;
-using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
 using System.Reflection;
 using System.Threading.Tasks;
 using log4net;
 using HISWEBAPI.GWT.PMS.Exceptions.Log;
-using Microsoft.AspNetCore.Identity.Data;
 
 namespace HISWEBAPI.Controllers
 {
@@ -20,7 +15,7 @@ namespace HISWEBAPI.Controllers
     {
         private readonly IHomeRepository _repository;
         private readonly IDistributedCache _distributedCache;
-        private static readonly ILog log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        private static readonly ILog _log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         public HomeController(IHomeRepository repository, IDistributedCache distributedCache)
         {
@@ -31,62 +26,49 @@ namespace HISWEBAPI.Controllers
         [HttpGet("getActiveBranchList")]
         public async Task<IActionResult> GetActiveBranchListAsync()
         {
-            log.Info("GetActiveBranchListAsync called in controller.");
-
+            _log.Info("GetActiveBranchListAsync called.");
             try
             {
                 var branches = await _repository.GetActiveBranchListAsync();
 
-                if (branches == null)
+                if (branches == null || !branches.Any())
                 {
-                    log.Warn("No branches found.");
-                    return NotFound("No active branches found.");
+                    _log.Warn("No branches found.");
+                    return NotFound(new { result = false, message = "No active branches found." });
                 }
 
-              
-                log.Info($"Branches fetched, Count: {branches.Count()}");
-                return Ok(branches);
+                _log.Info($"Branches fetched, Count: {branches.Count()}");
+                return Ok(new { result = true, data = branches });
             }
             catch (Exception ex)
             {
-                LogErrors.WriteErrorLog(ex, $"{MethodBase.GetCurrentMethod().ReflectedType}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server Error found" });
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred." });
             }
-
         }
 
         [HttpPost("userLogin")]
         public async Task<IActionResult> UserLoginAsync([FromBody] DTO.LoginRequest request)
         {
-            log.Info($"UserLoginAsync called. BranchId={request.BranchId}, UserName={request.UserName}");
-
+            _log.Info($"UserLoginAsync called. BranchId={request.BranchId}, UserName={request.UserName}");
             try
             {
                 var userId = await _repository.UserLoginAsync(request.BranchId, request.UserName, request.Password);
 
                 if (userId > 0)
                 {
-                    log.Info($"User login successful. UserId={userId}");
+                    _log.Info($"Login successful. UserId={userId}");
                     return Ok(new { result = true, userId });
                 }
-                else if (userId == 0)
-                {
-                    log.Warn("Invalid credentials.");
-                    return Unauthorized(new { result = false, message = "Invalid credentials." });
-                }
-                else
-                {
-                    log.Error("Internal error during login.");
-                    return StatusCode(500, new { result = false, message = "Internal server error." });
-                }
+
+                _log.Warn("Invalid credentials.");
+                return Unauthorized(new { result = false, message = "Invalid credentials." });
             }
             catch (Exception ex)
             {
-                LogErrors.WriteErrorLog(ex, $"{MethodBase.GetCurrentMethod().ReflectedType}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server Error found" });
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred." });
             }
-
         }
-
     }
 }

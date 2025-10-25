@@ -19,3 +19,28 @@ Content-Type: application/json
 }
 
 
+# ============================================
+# UserController API Requests
+# ============================================
+
+### Insert User Master - Create New User
+POST {{HISWEBAPI_HostAddress}}/api/user/insertUserMaster
+Content-Type: application/json
+
+{
+    "userId": null,
+    "firstName": "John",
+    "middleName": "Michael",
+    "lastName": "Doe",
+    "userName": "johndoe",
+    "password": "SecurePassword123!",
+    "email": "john.doe@example.com",
+    "contact": "9876543210",
+    "address": "123 Main Street, City",
+    "dob": "1990-05-15",
+    "gender": "Male",
+    "employeeID": "EMP001",
+    "isActive": true
+}
+
+###

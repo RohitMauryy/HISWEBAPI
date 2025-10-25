@@ -1,6 +1,4 @@
-using HISWEBAPI.Interface;
-using HISWEBAPI.Repositories;
-using Microsoft.EntityFrameworkCore;
+using HISWEBAPI.Configuration;
 using log4net;
 using log4net.Config;
 using log4net.Repository.Hierarchy;
@@ -19,19 +17,18 @@ bool enableErrorLog = builder.Configuration.GetValue<bool>("LoggingFlags:EnableE
 // ---------------------------
 // Configure log4net
 // ---------------------------
+string logBasePath = builder.Configuration.GetValue<string>("LoggingFlags:LogBasePath") ?? "Logs/";
+GlobalContext.Properties["LogPath"] = logBasePath;
+
 var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
 XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
 var logger = LogManager.GetLogger(typeof(Program));
 
-// Adjust root logger level dynamically based on flags
 if (logRepository is log4net.Repository.Hierarchy.Hierarchy hierarchy)
 {
     var root = hierarchy.Root;
-
-    // Default to OFF
     root.Level = Level.Off;
 
-    // Determine highest level to enable based on flags
     if (enableInfoLog)
         root.Level = Level.Info;
     else if (enableWarnLog)
@@ -42,36 +39,16 @@ if (logRepository is log4net.Repository.Hierarchy.Hierarchy hierarchy)
     hierarchy.RaiseConfigurationChanged(EventArgs.Empty);
 }
 
-
 logger.Info("Application starting...");
 
 // ---------------------------
-// CORS setup
+// Service Registration
 // ---------------------------
 var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy(name: MyAllowSpecificOrigins,
-        policy =>
-        {
-            policy.WithOrigins("http://localhost:5173")
-                  .AllowAnyHeader()
-                  .AllowAnyMethod();
-        });
-});
 
-// ---------------------------
-// Dependency Injection
-// ---------------------------
-builder.Services.AddScoped<IHomeRepository, HomeRepository>();
-
-// ---------------------------
-// Redis Cache
-// ---------------------------
-builder.Services.AddDistributedRedisCache(options =>
-{
-    options.Configuration = "localhost:6379"; // Redis server
-});
+DependencyInjection.RegisterCors(builder.Services, MyAllowSpecificOrigins);
+DependencyInjection.RegisterServices(builder.Services, builder.Configuration);
+DependencyInjection.RegisterCaching(builder.Services, builder.Configuration);
 
 // ---------------------------
 // Controllers and Swagger
@@ -81,7 +58,6 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
-
 logger.Info("Application built successfully");
 
 // ---------------------------
