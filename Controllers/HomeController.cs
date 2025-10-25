@@ -2,8 +2,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Distributed;
 using System;
+using System.Linq;
 using System.Reflection;
-using System.Threading.Tasks;
 using log4net;
 using HISWEBAPI.GWT.PMS.Exceptions.Log;
 
@@ -24,13 +24,12 @@ namespace HISWEBAPI.Controllers
         }
 
         [HttpGet("getActiveBranchList")]
-        public async Task<IActionResult> GetActiveBranchListAsync()
+        public IActionResult GetActiveBranchList()
         {
-            _log.Info("GetActiveBranchListAsync called.");
+            _log.Info("GetActiveBranchList called.");
             try
             {
-                var branches = await _repository.GetActiveBranchListAsync();
-
+                var branches = _repository.GetActiveBranchList();
                 if (branches == null || !branches.Any())
                 {
                     _log.Warn("No branches found.");
@@ -48,13 +47,12 @@ namespace HISWEBAPI.Controllers
         }
 
         [HttpPost("userLogin")]
-        public async Task<IActionResult> UserLoginAsync([FromBody] DTO.LoginRequest request)
+        public IActionResult UserLogin([FromBody] DTO.LoginRequest request)
         {
-            _log.Info($"UserLoginAsync called. BranchId={request.BranchId}, UserName={request.UserName}");
+            _log.Info($"UserLogin called. BranchId={request.BranchId}, UserName={request.UserName}");
             try
             {
-                var userId = await _repository.UserLoginAsync(request.BranchId, request.UserName, request.Password);
-
+                var userId = _repository.UserLogin(request.BranchId, request.UserName, request.Password);
                 if (userId > 0)
                 {
                     _log.Info($"Login successful. UserId={userId}");

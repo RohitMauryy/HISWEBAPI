@@ -3,7 +3,6 @@ using HISWEBAPI.Interface;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Reflection;
-using System.Threading.Tasks;
 using log4net;
 using HISWEBAPI.GWT.PMS.Exceptions.Log;
 
@@ -22,7 +21,7 @@ namespace HISWEBAPI.Controllers
         }
 
         [HttpPost("insertUserMaster")]
-        public async Task<IActionResult> InsertUserMaster([FromBody] UserMasterRequest request)
+        public IActionResult InsertUserMaster([FromBody] UserMasterRequest request)
         {
             _log.Info($"InsertUserMaster called. UserName={request.UserName}");
 
@@ -34,7 +33,7 @@ namespace HISWEBAPI.Controllers
                     return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
                 }
 
-                var result = await _userRepository.InsertUserMasterAsync(request);
+                var result = _userRepository.InsertUserMaster(request);
 
                 if (result == -2)
                 {

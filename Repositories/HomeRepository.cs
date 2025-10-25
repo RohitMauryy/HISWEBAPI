@@ -3,7 +3,6 @@ using HISWEBAPI.Interface;
 using PMS.DAL;
 using System.Collections.Generic;
 using System.Data;
-using System.Threading.Tasks;
 using System.Linq;
 
 namespace HISWEBAPI.Repositories
@@ -17,9 +16,9 @@ namespace HISWEBAPI.Repositories
             _sqlHelper = sqlHelper;
         }
 
-        public async Task<IEnumerable<BranchModel>> GetActiveBranchListAsync()
+        public IEnumerable<BranchModel> GetActiveBranchList()
         {
-            var dataTable = await _sqlHelper.GetDataTableAsync(
+            var dataTable = _sqlHelper.GetDataTable(
                 "S_GetActiveBranchList",
                 CommandType.StoredProcedure
             );
@@ -31,19 +30,21 @@ namespace HISWEBAPI.Repositories
             }).ToList() ?? new List<BranchModel>();
         }
 
-        public async Task<long> UserLoginAsync(int branchId, string userName, string password)
+        public long UserLogin(int branchId, string userName, string password)
         {
-            var result = await _sqlHelper.ExecuteScalarAsync(
-                "sp_S_Login",
-                CommandType.StoredProcedure,
-                new { BranchId = branchId, UserName = userName, Password = password }
+            var result = _sqlHelper.ExecuteScalar("sp_S_Login",CommandType.StoredProcedure,
+                new { 
+                    BranchId = branchId,
+                    UserName = userName,
+                    Password = password 
+                }
             );
 
             long userId = 0; // Initialize here
             if (result != null && long.TryParse(result.ToString(), out userId))
                 return userId;
 
-            return 0; // invalid credentials
+            return 0;
         }
     }
 }

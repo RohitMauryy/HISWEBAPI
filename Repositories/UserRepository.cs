@@ -2,7 +2,6 @@
 using HISWEBAPI.Interface;
 using PMS.DAL;
 using System.Data;
-using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 
 namespace HISWEBAPI.Repositories
@@ -16,7 +15,7 @@ namespace HISWEBAPI.Repositories
             _sqlHelper = sqlHelper;
         }
 
-        public async Task<long> InsertUserMasterAsync(UserMasterRequest request)
+        public long InsertUserMaster(UserMasterRequest request)
         {
             SqlParameter[] parameters = new SqlParameter[]
             {
@@ -37,7 +36,7 @@ namespace HISWEBAPI.Repositories
                 new SqlParameter("@Result", SqlDbType.BigInt) { Direction = ParameterDirection.Output }
             };
 
-            return await _sqlHelper.RunProcedureInsertAsync("sp_I_UserMaster", parameters);
+            return _sqlHelper.RunProcedureInsert("sp_I_UserMaster", parameters);
         }
     }
 }

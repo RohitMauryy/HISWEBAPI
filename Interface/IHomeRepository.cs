@@ -5,7 +5,7 @@ namespace HISWEBAPI.Interface
 {
     public interface IHomeRepository
     {
-        Task<IEnumerable<BranchModel>> GetActiveBranchListAsync();
-        Task<long> UserLoginAsync(int branchId, string userName, string password);
+        IEnumerable<BranchModel> GetActiveBranchList();
+        long UserLogin(int branchId, string userName, string password);
     }
 }
