@@ -13,11 +13,7 @@ public static class SwaggerConfiguration
                 Version = "v1",
                 Description = "Hospital Information System Web API"
             });
-
-            // Add JWT Authentication to Swagger (if using JWT)
-            // options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme { ... });
         });
-
         return services;
     }
 
@@ -26,10 +22,8 @@ public static class SwaggerConfiguration
         app.UseSwagger();
         app.UseSwaggerUI(options =>
         {
-            options.SwaggerEndpoint("/swagger/v1/swagger.json", "HISWEBAPI v1");
-            // options.RoutePrefix = string.Empty; // REMOVE THIS or set to "swagger"
+            options.SwaggerEndpoint("./v1/swagger.json", "HISWEBAPI v1");
         });
-
         return app;
     }
 }
