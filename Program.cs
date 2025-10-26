@@ -63,11 +63,10 @@ logger.Info("Application built successfully");
 // ---------------------------
 // Middleware
 // ---------------------------
-if (app.Environment.IsDevelopment())
-{
+
     app.UseSwagger();
     app.UseSwaggerUI();
-}
+
 
 app.UseHttpsRedirection();
 app.UseCors(MyAllowSpecificOrigins);
