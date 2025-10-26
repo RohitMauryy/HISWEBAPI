@@ -1,11 +1,12 @@
-﻿using HISWEBAPI.Interface;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Distributed;
 using System;
 using System.Linq;
 using System.Reflection;
 using log4net;
-using HISWEBAPI.GWT.PMS.Exceptions.Log;
+using HISWEBAPI.DTO.Admin;
+using HISWEBAPI.Repositories.Interfaces;
+using HISWEBAPI.Exceptions;
 
 namespace HISWEBAPI.Controllers
 {
@@ -47,7 +48,7 @@ namespace HISWEBAPI.Controllers
         }
 
         [HttpPost("userLogin")]
-        public IActionResult UserLogin([FromBody] DTO.LoginRequest request)
+        public IActionResult UserLogin([FromBody] LoginRequest request)
         {
             _log.Info($"UserLogin called. BranchId={request.BranchId}, UserName={request.UserName}");
             try

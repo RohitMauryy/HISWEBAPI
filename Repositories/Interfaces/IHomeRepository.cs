@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
-using HISWEBAPI.Models;
+using HISWEBAPI.Models.Admin;
 
-namespace HISWEBAPI.Interface
+namespace HISWEBAPI.Repositories.Interfaces
 {
     public interface IHomeRepository
     {

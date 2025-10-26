@@ -1,6 +1,6 @@
-﻿using HISWEBAPI.DTO;
+﻿using HISWEBAPI.DTO.User;
 
-namespace HISWEBAPI.Interface
+namespace HISWEBAPI.Repositories.Interfaces
 {
     public interface IUserRepository
     {

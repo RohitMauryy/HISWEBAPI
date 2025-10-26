@@ -3,7 +3,7 @@ using System.Net;
 using System.Reflection;
 using log4net;
 
-namespace HISWEBAPI.GWT.PMS.Exceptions.Log
+namespace HISWEBAPI.Exceptions
 {
     public static class LogErrors
     {
@@ -22,7 +22,7 @@ namespace HISWEBAPI.GWT.PMS.Exceptions.Log
                 message += $" Location                : {location}\n";
                 message += $" Time Of Error           : {DateTime.Now}\n";
                 message += $" Error Message           : {ex.Message}\n";
-               // message += $" Error Place             : {ex.StackTrace}\n";
+                // message += $" Error Place             : {ex.StackTrace}\n";
                 message += $" Error On Machine        : {Dns.GetHostName()}\n";
                 message += $" Error Machine IP Address: {addr.GetValue(0)}\n";
                 message += $" Exception Type          : {ex.GetType()}\n";

@@ -1,6 +1,6 @@
 ﻿using System;
 using System.ComponentModel.DataAnnotations;
-namespace HISWEBAPI.DTO
+namespace HISWEBAPI.DTO.User
 {
     public class UserMasterRequest
     {

@@ -1,4 +1,4 @@
-﻿namespace HISWEBAPI.DTO
+﻿namespace HISWEBAPI.DTO.Admin
 {
     public class LoginRequest
     {

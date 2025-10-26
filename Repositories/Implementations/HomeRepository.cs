@@ -1,11 +1,11 @@
-﻿using HISWEBAPI.Models;
-using HISWEBAPI.Interface;
-using PMS.DAL;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using HISWEBAPI.Repositories.Interfaces;
+using HISWEBAPI.Data.Helpers;
+using HISWEBAPI.Models.Admin;
 
-namespace HISWEBAPI.Repositories
+namespace HISWEBAPI.Repositories.Implementations
 {
     public class HomeRepository : IHomeRepository
     {
@@ -32,11 +32,12 @@ namespace HISWEBAPI.Repositories
 
         public long UserLogin(int branchId, string userName, string password)
         {
-            var result = _sqlHelper.ExecuteScalar("sp_S_Login",CommandType.StoredProcedure,
-                new { 
+            var result = _sqlHelper.ExecuteScalar("sp_S_Login", CommandType.StoredProcedure,
+                new
+                {
                     BranchId = branchId,
                     UserName = userName,
-                    Password = password 
+                    Password = password
                 }
             );
 

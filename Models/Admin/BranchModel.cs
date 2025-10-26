@@ -1,4 +1,4 @@
-﻿namespace HISWEBAPI.Models
+﻿namespace HISWEBAPI.Models.Admin
 {
     public class BranchModel
     {

@@ -4,7 +4,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using System.Threading.Tasks;
 
-namespace PMS.DAL
+namespace HISWEBAPI.Data.Helpers
 {
     public class CustomSqlHelper : ICustomSqlHelper
     {
@@ -503,7 +503,7 @@ namespace PMS.DAL
             }
         }
 
-        public Int64 RunProcedureInsert(string storedProcName, IDataParameter[] parameters)
+        public long RunProcedureInsert(string storedProcName, IDataParameter[] parameters)
         {
             try
             {
@@ -515,7 +515,7 @@ namespace PMS.DAL
                 gstrCommandText = command.Parameters.Count.ToString();
                 command.ExecuteNonQuery();
 
-                return Int64.Parse(command.Parameters["@Result"].Value.ToString());
+                return long.Parse(command.Parameters["@Result"].Value.ToString());
             }
             finally
             {
@@ -523,7 +523,7 @@ namespace PMS.DAL
             }
         }
 
-        public async Task<Int64> RunProcedureInsertAsync(string storedProcName, IDataParameter[] parameters)
+        public async Task<long> RunProcedureInsertAsync(string storedProcName, IDataParameter[] parameters)
         {
             SqlConnection connection = null;
             try
@@ -542,7 +542,7 @@ namespace PMS.DAL
                 gstrCommandText = command.Parameters.Count.ToString();
                 await command.ExecuteNonQueryAsync();
 
-                return Int64.Parse(command.Parameters["@Result"].Value.ToString());
+                return long.Parse(command.Parameters["@Result"].Value.ToString());
             }
             finally
             {

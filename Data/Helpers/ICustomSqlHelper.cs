@@ -4,7 +4,7 @@ using System.Data;
 using Microsoft.Data.SqlClient;
 using System.Threading.Tasks;
 
-namespace PMS.DAL
+namespace HISWEBAPI.Data.Helpers
 {
     public interface ICustomSqlHelper
     {
@@ -41,7 +41,7 @@ namespace PMS.DAL
         Task<DataSet> RunProcedureAsync(string storedProcName, IDataParameter[] parameters, string tableName);
         Task<DataSet> RunProcedureAsync(string storedProcName, string tableName);
 
-        Int64 RunProcedureInsert(string storedProcName, IDataParameter[] parameters);
-        Task<Int64> RunProcedureInsertAsync(string storedProcName, IDataParameter[] parameters);
+        long RunProcedureInsert(string storedProcName, IDataParameter[] parameters);
+        Task<long> RunProcedureInsertAsync(string storedProcName, IDataParameter[] parameters);
     }
 }
