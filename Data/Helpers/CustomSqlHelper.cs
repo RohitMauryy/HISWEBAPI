@@ -2,7 +2,6 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
-using System.Threading.Tasks;
 
 namespace HISWEBAPI.Data.Helpers
 {
@@ -71,27 +70,6 @@ namespace HISWEBAPI.Data.Helpers
             finally
             {
                 CloseConnection(con);
-            }
-        }
-
-        public async Task<dynamic> DMLAsync(string sqlCmd, CommandType commandType, object inParameters = null, object outParameters = null)
-        {
-            SqlConnection connection = null;
-            try
-            {
-                connection = GetConnectionString();
-                if (connection.State == ConnectionState.Closed)
-                    await connection.OpenAsync();
-
-                SqlCommand cmd = new SqlCommand(sqlCmd, connection);
-                cmd.CommandType = commandType;
-                CreateCmdParameters(cmd, inParameters, outParameters);
-
-                return await cmd.ExecuteNonQueryAsync();
-            }
-            finally
-            {
-                CloseConnection(connection);
             }
         }
 
@@ -167,27 +145,6 @@ namespace HISWEBAPI.Data.Helpers
             }
         }
 
-        public async Task<dynamic> ExecuteScalarAsync(string sqlCmd, CommandType commandType, object inParameters = null)
-        {
-            SqlConnection connection = null;
-            try
-            {
-                connection = GetConnectionString();
-                if (connection.State == ConnectionState.Closed)
-                    await connection.OpenAsync();
-
-                SqlCommand cmd = new SqlCommand(sqlCmd, connection);
-                cmd.CommandType = commandType;
-                CreateCmdParameters(cmd, inParameters, null);
-
-                return await cmd.ExecuteScalarAsync();
-            }
-            finally
-            {
-                CloseConnection(connection);
-            }
-        }
-
         #endregion
 
         #region GetDataTable Methods
@@ -227,31 +184,6 @@ namespace HISWEBAPI.Data.Helpers
             da.Fill(ds);
 
             return ds.Tables[0];
-        }
-
-        public async Task<DataTable> GetDataTableAsync(string sqlCmd, CommandType commandType, object inParameters = null)
-        {
-            SqlConnection connection = null;
-            try
-            {
-                connection = GetConnectionString();
-                if (connection.State == ConnectionState.Closed)
-                    await connection.OpenAsync();
-
-                SqlCommand cmd = new SqlCommand(sqlCmd, connection);
-                cmd.CommandType = commandType;
-                CreateCmdParameters(cmd, inParameters, null);
-
-                SqlDataAdapter da = new SqlDataAdapter(cmd);
-                DataSet ds = new DataSet();
-                da.Fill(ds);
-
-                return ds.Tables[0];
-            }
-            finally
-            {
-                CloseConnection(connection);
-            }
         }
 
         #endregion
@@ -306,56 +238,6 @@ namespace HISWEBAPI.Data.Helpers
             }
         }
 
-        public async Task<DataSet> GetDataSetAsync(string sqlCmd, CommandType commandType, object inParameters = null)
-        {
-            SqlConnection connection = null;
-            try
-            {
-                connection = GetConnectionString();
-                if (connection.State == ConnectionState.Closed)
-                    await connection.OpenAsync();
-
-                SqlCommand cmd = new SqlCommand(sqlCmd, connection);
-                cmd.CommandType = commandType;
-                CreateCmdParameters(cmd, inParameters, null);
-
-                SqlDataAdapter da = new SqlDataAdapter(cmd);
-                DataSet ds = new DataSet();
-                da.Fill(ds);
-
-                return ds;
-            }
-            finally
-            {
-                CloseConnection(connection);
-            }
-        }
-
-        public async Task<DataSet> GetDataSetAsync(string sqlCmd, CommandType commandType, object inParameters = null, string TableName = "")
-        {
-            SqlConnection connection = null;
-            try
-            {
-                connection = GetConnectionString();
-                if (connection.State == ConnectionState.Closed)
-                    await connection.OpenAsync();
-
-                SqlCommand cmd = new SqlCommand(sqlCmd, connection);
-                cmd.CommandType = commandType;
-                CreateCmdParameters(cmd, inParameters, null);
-
-                SqlDataAdapter da = new SqlDataAdapter(cmd);
-                DataSet ds = new DataSet();
-                da.Fill(ds, TableName);
-
-                return ds;
-            }
-            finally
-            {
-                CloseConnection(connection);
-            }
-        }
-
         #endregion
 
         #region RunProcedure Methods
@@ -377,33 +259,6 @@ namespace HISWEBAPI.Data.Helpers
             finally
             {
                 CloseConnection(con);
-            }
-        }
-
-        public async Task<string> RunProcedureRetInsertAsync(string storedProcName, IDataParameter[] parameters)
-        {
-            SqlConnection connection = null;
-            try
-            {
-                connection = GetConnectionString();
-                if (connection.State == ConnectionState.Closed)
-                    await connection.OpenAsync();
-
-                SqlCommand command = new SqlCommand(storedProcName, connection);
-                command.CommandType = CommandType.StoredProcedure;
-                foreach (SqlParameter parameter in parameters)
-                {
-                    command.Parameters.Add(parameter);
-                }
-
-                gstrCommandText = command.Parameters.Count.ToString();
-                await command.ExecuteNonQueryAsync();
-
-                return command.Parameters["@RetVal"].Value?.ToString() ?? "";
-            }
-            finally
-            {
-                CloseConnection(connection);
             }
         }
 
@@ -451,58 +306,6 @@ namespace HISWEBAPI.Data.Helpers
             }
         }
 
-        public async Task<DataSet> RunProcedureAsync(string storedProcName, IDataParameter[] parameters, string tableName)
-        {
-            SqlConnection connection = null;
-            try
-            {
-                connection = GetConnectionString();
-                if (connection.State == ConnectionState.Closed)
-                    await connection.OpenAsync();
-
-                SqlCommand command = new SqlCommand(storedProcName, connection);
-                command.CommandType = CommandType.StoredProcedure;
-                foreach (SqlParameter parameter in parameters)
-                {
-                    command.Parameters.Add(parameter);
-                }
-
-                SqlDataAdapter sqlDA = new SqlDataAdapter(command);
-                DataSet dSet = new DataSet();
-                sqlDA.Fill(dSet, tableName);
-
-                return dSet;
-            }
-            finally
-            {
-                CloseConnection(connection);
-            }
-        }
-
-        public async Task<DataSet> RunProcedureAsync(string storedProcName, string tableName)
-        {
-            SqlConnection connection = null;
-            try
-            {
-                connection = GetConnectionString();
-                if (connection.State == ConnectionState.Closed)
-                    await connection.OpenAsync();
-
-                SqlCommand command = new SqlCommand(storedProcName, connection);
-                command.CommandType = CommandType.StoredProcedure;
-
-                SqlDataAdapter sqlDA = new SqlDataAdapter(command);
-                DataSet dSet = new DataSet();
-                sqlDA.Fill(dSet, tableName);
-
-                return dSet;
-            }
-            finally
-            {
-                CloseConnection(connection);
-            }
-        }
-
         public long RunProcedureInsert(string storedProcName, IDataParameter[] parameters)
         {
             try
@@ -523,30 +326,29 @@ namespace HISWEBAPI.Data.Helpers
             }
         }
 
-        public async Task<long> RunProcedureInsertAsync(string storedProcName, IDataParameter[] parameters)
+        public void RunProcedure(string storedProcName, SqlParameter[] parameters)
         {
-            SqlConnection connection = null;
             try
             {
-                connection = GetConnectionString();
-                if (connection.State == ConnectionState.Closed)
-                    await connection.OpenAsync();
+                con = GetConnectionString();
+                if (con.State == ConnectionState.Closed)
+                    con.Open();
 
-                SqlCommand command = new SqlCommand(storedProcName, connection);
+                SqlCommand command = new SqlCommand(storedProcName, con);
                 command.CommandType = CommandType.StoredProcedure;
+
                 foreach (SqlParameter parameter in parameters)
                 {
                     command.Parameters.Add(parameter);
                 }
 
-                gstrCommandText = command.Parameters.Count.ToString();
-                await command.ExecuteNonQueryAsync();
+                command.ExecuteNonQuery();
 
-                return long.Parse(command.Parameters["@Result"].Value.ToString());
+                // Output parameters are automatically populated after ExecuteNonQuery
             }
             finally
             {
-                CloseConnection(connection);
+                CloseConnection(con);
             }
         }
 

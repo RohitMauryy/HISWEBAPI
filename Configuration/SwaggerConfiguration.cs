@@ -10,8 +10,7 @@ public static class SwaggerConfiguration
             options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
             {
                 Title = "HISWEBAPI",
-                Version = "v1",
-                Description = "Hospital Information System Web API"
+                Version = "v1"
             });
         });
         return services;
