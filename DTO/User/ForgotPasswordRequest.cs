@@ -17,6 +17,6 @@ namespace HISWEBAPI.DTO.User
         public bool Result { get; set; }
         public string Message { get; set; }
         public string ContactHint { get; set; }
-        public long UserId { get; set; }
+        public long? UserId { get; set; }
     }
 }

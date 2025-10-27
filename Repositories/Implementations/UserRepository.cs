@@ -89,16 +89,26 @@ namespace HISWEBAPI.Repositories.Implementations
             {
                 SqlParameter[] parameters = new SqlParameter[]
                 {
-            new SqlParameter("@UserId", userId),
-            new SqlParameter("@Otp", otp),
-            new SqlParameter("@ExpiryMinutes", expiryMinutes)
+                    new SqlParameter("@UserId", userId),
+                    new SqlParameter("@Otp", otp),
+                    new SqlParameter("@ExpiryMinutes", expiryMinutes)
                 };
 
-                _sqlHelper.RunProcedure("sp_StoreOtpForPasswordReset", parameters);
-                return true;
+                // Use GetDataTable to execute the stored procedure
+                var result = _sqlHelper.GetDataTable("sp_StoreOtpForPasswordReset", CommandType.StoredProcedure,
+                    new { UserId = userId, Otp = otp, ExpiryMinutes = expiryMinutes });
+
+                if (result != null && result.Rows.Count > 0)
+                {
+                    int resultValue = Convert.ToInt32(result.Rows[0]["Result"]);
+                    return resultValue == 1;
+                }
+
+                return false;
             }
-            catch
+            catch (Exception ex)
             {
+                // Log the error
                 return false;
             }
         }

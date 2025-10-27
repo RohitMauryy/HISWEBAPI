@@ -10,6 +10,7 @@ builder.AddLoggingConfiguration();
 builder.Services.AddApplicationServices(builder.Configuration);
 builder.Services.AddSwaggerConfiguration();
 builder.Services.AddControllers();
+builder.Services.AddHttpClient();
 
 // Build app
 var app = builder.Build();

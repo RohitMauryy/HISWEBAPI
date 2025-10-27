@@ -6,6 +6,7 @@ using HISWEBAPI.DTO.User;
 using HISWEBAPI.Repositories.Interfaces;
 using HISWEBAPI.Exceptions;
 using System.Text;
+using HISWEBAPI.Services.Interfaces;
 
 namespace HISWEBAPI.Controllers
 {
@@ -14,11 +15,13 @@ namespace HISWEBAPI.Controllers
     public class UserController : ControllerBase
     {
         private readonly IUserRepository _userRepository;
+        private readonly ISmsService _smsService;
         private static readonly ILog _log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        public UserController(IUserRepository userRepository)
+        public UserController(IUserRepository userRepository, ISmsService smsService)
         {
             _userRepository = userRepository;
+            _smsService = smsService;
         }
 
         [HttpPost("insertUserMaster")]
@@ -73,7 +76,7 @@ namespace HISWEBAPI.Controllers
 
 
         [HttpPost("sendPasswordResetOtp")]
-        public IActionResult sendPasswordResetOtp([FromBody] ForgotPasswordRequest request)
+        public IActionResult SendPasswordResetOtp([FromBody] ForgotPasswordRequest request)
         {
             _log.Info($"sendPasswordResetOtp called. UserName={request.UserName}");
 
@@ -85,7 +88,7 @@ namespace HISWEBAPI.Controllers
                     return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
                 }
 
-                var (userExists, contactMatch, userId,registeredContact) = _userRepository.ValidateUserForPasswordReset(
+                var (userExists, contactMatch, userId, registeredContact) = _userRepository.ValidateUserForPasswordReset(
                     request.UserName,
                     request.Contact
                 );
@@ -116,11 +119,8 @@ namespace HISWEBAPI.Controllers
                     });
                 }
 
-                // Both username and contact match - validation successful
-                _log.Info($"User validation successful for username: {request.UserName}");
                 // Generate OTP
-                //string otp = GenerateOtp();
-                string otp = "123456";
+                string otp = GenerateOtp();
 
                 // Store OTP in database with 5 minute expiry
                 bool otpStored = _userRepository.StoreOtpForPasswordReset(userId, otp, 5);
@@ -131,9 +131,17 @@ namespace HISWEBAPI.Controllers
                     return StatusCode(500, new { result = false, message = "Failed to generate OTP. Please try again." });
                 }
 
-                // SendOtpViaSms(registeredContact, otp);
+                // Send OTP via SMS
+                bool smsSent = _smsService.SendOtp(registeredContact, otp);
 
-                // For development/testing, you can log the OTP
+                if (!smsSent)
+                {
+                    _log.Error($"Failed to send SMS to: {registeredContact}");
+                    // Note: OTP is already stored in DB, so we still return success but log the SMS failure
+                    _log.Warn($"OTP stored but SMS failed for user: {request.UserName}");
+                }
+
+                // Log OTP for development/testing
                 _log.Info($"OTP generated for user {request.UserName}: {otp}");
 
                 string contactHintSuccess = GenerateContactHint(registeredContact);
@@ -143,7 +151,8 @@ namespace HISWEBAPI.Controllers
                 return Ok(new ForgotPasswordResponse
                 {
                     Result = true,
-                    Message = $"OTP sent successfully on contact no. {registeredContact}",
+                    Message = $"OTP sent successfully on contact no. {contactHintSuccess}",
+                    ContactHint = contactHintSuccess,
                     UserId = userId
                 });
             }
@@ -155,6 +164,7 @@ namespace HISWEBAPI.Controllers
             }
         }
 
+        // OTP Generation method (6-digit OTP)
         private string GenerateOtp()
         {
             Random random = new Random();
@@ -168,17 +178,13 @@ namespace HISWEBAPI.Controllers
 
             int length = contact.Length;
 
-            // If contact is too short (less than 4 characters)
             if (length < 4)
             {
                 return new string('*', length);
             }
 
-            // Get first 2 and last 2 digits
             string first2 = contact.Substring(0, 2);
             string last2 = contact.Substring(length - 2, 2);
-
-            // Create middle asterisks
             string middle = new string('*', length - 4);
 
             return $"{first2}{middle}{last2}";
