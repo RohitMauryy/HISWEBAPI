@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using HISWEBAPI.DTO.User;
 using HISWEBAPI.Repositories.Interfaces;
 using HISWEBAPI.Data.Helpers;
+using HISWEBAPI.Utilities;
 
 namespace HISWEBAPI.Repositories.Implementations
 {
@@ -13,6 +14,28 @@ namespace HISWEBAPI.Repositories.Implementations
         public UserRepository(ICustomSqlHelper sqlHelper)
         {
             _sqlHelper = sqlHelper;
+        }
+
+        public long UserLogin(int branchId, string userName, string password)
+        {
+            DataTable dt = _sqlHelper.GetDataTable("sp_S_Login", CommandType.StoredProcedure, new
+            {
+                BranchId = branchId,
+                UserName = userName
+            });
+
+            if (dt == null || dt.Rows.Count == 0)
+                return 0;
+
+            DataRow userRow = dt.Rows[0];
+            string storedHash = Convert.ToString(userRow["Password"]);
+
+            bool isPasswordValid = PasswordHasher.VerifyPassword(password, storedHash);
+
+            if (isPasswordValid)
+                return Convert.ToInt64(userRow["Id"]);
+
+            return 0;
         }
 
         public long InsertUserMaster(UserMasterRequest request)
@@ -27,7 +50,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 new SqlParameter("@FirstName", request.FirstName),
                 new SqlParameter("@MidelName", request.MiddleName ?? (object)DBNull.Value),
                 new SqlParameter("@LastName", request.LastName ?? (object)DBNull.Value),
-                new SqlParameter("@Password", request.Password),
+                new SqlParameter("@Password", PasswordHasher.HashPassword(request.Password)),
                 new SqlParameter("@UserName", request.UserName),
                 new SqlParameter("@Gender", request.Gender ?? (object)DBNull.Value),
                 new SqlParameter("@UserId", request.UserId.HasValue && request.UserId.Value > 0
@@ -112,5 +135,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 return false;
             }
         }
+
+
     }
 }

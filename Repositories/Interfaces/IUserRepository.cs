@@ -2,6 +2,7 @@
 
 public interface IUserRepository
 {
+    long UserLogin(int branchId, string userName, string password);
     long InsertUserMaster(UserMasterRequest request);
     (bool userExists, bool contactMatch, long userId, string registeredContact) ValidateUserForPasswordReset(string userName, string contact);
     bool StoreOtpForPasswordReset(long userId, string otp, int expiryMinutes);

@@ -9,11 +9,16 @@ builder.AddLoggingConfiguration();
 // Add services
 builder.Services.AddApplicationServices(builder.Configuration);
 builder.Services.AddSwaggerConfiguration();
+
+// Add JWT Authentication
+builder.Services.AddJwtAuthentication(builder.Configuration);
+
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
 
 // Build app
 var app = builder.Build();
+
 var logger = LogManager.GetLogger(typeof(Program));
 logger.Info("Application starting...");
 
@@ -21,8 +26,11 @@ logger.Info("Application starting...");
 app.UseSwaggerConfiguration();
 app.UseHttpsRedirection();
 app.UseCors("_myAllowSpecificOrigins");
+
+// Authentication & Authorization (ORDER MATTERS!)
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
 // Run application

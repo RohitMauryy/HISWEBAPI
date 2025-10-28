@@ -30,22 +30,6 @@ namespace HISWEBAPI.Repositories.Implementations
             }).ToList() ?? new List<BranchModel>();
         }
 
-        public long UserLogin(int branchId, string userName, string password)
-        {
-            var result = _sqlHelper.ExecuteScalar("sp_S_Login", CommandType.StoredProcedure,
-                new
-                {
-                    BranchId = branchId,
-                    UserName = userName,
-                    Password = password
-                }
-            );
-
-            long userId = 0; // Initialize here
-            if (result != null && long.TryParse(result.ToString(), out userId))
-                return userId;
-
-            return 0;
-        }
+       
     }
 }

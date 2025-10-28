@@ -7,6 +7,9 @@ using HISWEBAPI.Repositories.Interfaces;
 using HISWEBAPI.Exceptions;
 using System.Text;
 using HISWEBAPI.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
+using HISWEBAPI.Services;
+using HISWEBAPI.Utilities;
 
 namespace HISWEBAPI.Controllers
 {
@@ -16,12 +19,167 @@ namespace HISWEBAPI.Controllers
     {
         private readonly IUserRepository _userRepository;
         private readonly ISmsService _smsService;
+        private readonly IJwtService _jwtService;
         private static readonly ILog _log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        public UserController(IUserRepository userRepository, ISmsService smsService)
+        public UserController(IUserRepository userRepository, ISmsService smsService, IJwtService jwtService)
         {
             _userRepository = userRepository;
             _smsService = smsService;
+            _jwtService = jwtService;
+
+        }
+
+
+        [HttpPost("userLogin")]
+        [AllowAnonymous]
+        public IActionResult UserLogin([FromBody] LoginRequest request)
+        {
+            _log.Info($"UserLogin called. BranchId={request.BranchId}, UserName={request.UserName}");
+            try
+            {
+                // Validate model
+                if (!ModelState.IsValid)
+                {
+                    _log.Warn("Invalid login request model.");
+                    return BadRequest(new { result = false, message = "Invalid request data.", errors = ModelState });
+                }
+
+                // Authenticate user
+                var userId = _userRepository.UserLogin(request.BranchId, request.UserName, request.Password);
+
+                if (userId > 0)
+                {
+                    // Generate JWT tokens
+                    var roles = new List<string> { "User" }; // You can fetch actual roles from database
+                    var email = $"{request.UserName}@hospital.com"; // Replace with actual email from database if available
+
+                    var accessToken = _jwtService.GenerateToken(
+                        userId.ToString(),
+                        request.UserName,
+                        email,
+                        roles
+                    );
+
+                    var refreshToken = _jwtService.GenerateRefreshToken();
+
+                    // TODO: Save refresh token to database for future use
+                    // Example: _userRepository.SaveRefreshToken(userId, refreshToken, DateTime.UtcNow.AddDays(7));
+
+                    _log.Info($"Login successful. UserId={userId}, Token generated.");
+
+                    return Ok(new
+                    {
+                        result = true,
+                        message = "Login successful",
+                        data = new
+                        {
+                            userId = userId,
+                            userName = request.UserName,
+                            branchId = request.BranchId,
+                            accessToken = accessToken,
+                            refreshToken = refreshToken,
+                            tokenType = "Bearer",
+                            expiresIn = 3600 // 60 minutes in seconds
+                        }
+                    });
+                }
+
+                _log.Warn($"Invalid credentials for UserName={request.UserName}, BranchId={request.BranchId}");
+                return Unauthorized(new { result = false, message = "Invalid credentials." });
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error during login: {ex.Message}", ex);
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred." });
+            }
+        }
+
+        [HttpPost("refreshToken")]
+        [AllowAnonymous]
+        public IActionResult RefreshToken([FromBody] RefreshTokenRequest request)
+        {
+            _log.Info("RefreshToken called.");
+            try
+            {
+                if (string.IsNullOrEmpty(request.AccessToken) || string.IsNullOrEmpty(request.RefreshToken))
+                {
+                    _log.Warn("Invalid refresh token request.");
+                    return BadRequest(new { result = false, message = "Access token and refresh token are required." });
+                }
+
+                // Validate the expired token and extract claims
+                var principal = _jwtService.GetPrincipalFromExpiredToken(request.AccessToken);
+                if (principal == null)
+                {
+                    _log.Warn("Invalid access token provided for refresh.");
+                    return BadRequest(new { result = false, message = "Invalid access token." });
+                }
+
+                var userId = principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                var username = principal.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+                var email = principal.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+                var roles = principal.FindAll(System.Security.Claims.ClaimTypes.Role)
+                    .Select(c => c.Value).ToList();
+
+                // TODO: Validate refresh token from database
+                // Example: var isValidRefreshToken = _userRepository.ValidateRefreshToken(userId, request.RefreshToken);
+                // if (!isValidRefreshToken) return Unauthorized();
+
+                // Generate new tokens
+                var newAccessToken = _jwtService.GenerateToken(userId ?? "", username ?? "", email ?? "", roles);
+                var newRefreshToken = _jwtService.GenerateRefreshToken();
+
+                // TODO: Update refresh token in database
+                // Example: _userRepository.UpdateRefreshToken(userId, newRefreshToken, DateTime.UtcNow.AddDays(7));
+
+                _log.Info($"Token refreshed successfully for UserId={userId}");
+
+                return Ok(new
+                {
+                    result = true,
+                    message = "Token refreshed successfully",
+                    data = new
+                    {
+                        accessToken = newAccessToken,
+                        refreshToken = newRefreshToken,
+                        tokenType = "Bearer",
+                        expiresIn = 3600
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error refreshing token: {ex.Message}", ex);
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred while refreshing token." });
+            }
+        }
+
+        [HttpPost("logout")]
+        [Authorize]
+        public IActionResult Logout()
+        {
+            _log.Info("Logout called.");
+            try
+            {
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                var username = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+
+                // TODO: Invalidate refresh token in database
+                // Example: _userRepository.InvalidateRefreshToken(userId);
+
+                _log.Info($"User logged out successfully. UserId={userId}, UserName={username}");
+
+                return Ok(new { result = true, message = "Logged out successfully." });
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error during logout: {ex.Message}", ex);
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred during logout." });
+            }
         }
 
         [HttpPost("insertUserMaster")]
@@ -205,8 +363,8 @@ namespace HISWEBAPI.Controllers
                 }
 
                 // Hash the new password before storing
-                //string hashedPassword = HashPassword(request.NewPassword);
-                string hashedPassword = request.NewPassword;
+                string hashedPassword = PasswordHasher.HashPassword(request.NewPassword);
+                //string hashedPassword = request.NewPassword;
 
                 var (result, message) = _userRepository.VerifyOtpAndResetPassword(
                     request.UserName,
@@ -275,16 +433,6 @@ namespace HISWEBAPI.Controllers
                 return StatusCode(500, new { result = false, message = "Server error occurred." });
             }
         }
-
-        // Password hashing helper method (if not already present)
-        //private string HashPassword(string password)
-        //{
-        //    using (var sha256 = SHA256.Create())
-        //    {
-        //        var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
-        //        return Convert.ToBase64String(hashedBytes);
-        //    }
-        //}
 
     }
 }
