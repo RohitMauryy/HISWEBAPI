@@ -10,6 +10,8 @@ using HISWEBAPI.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using HISWEBAPI.Services;
 using HISWEBAPI.Utilities;
+using System.Data;
+using Azure.Core;
 
 namespace HISWEBAPI.Controllers
 {
@@ -27,9 +29,7 @@ namespace HISWEBAPI.Controllers
             _userRepository = userRepository;
             _smsService = smsService;
             _jwtService = jwtService;
-
         }
-
 
         [HttpPost("userLogin")]
         [AllowAnonymous]
@@ -38,7 +38,6 @@ namespace HISWEBAPI.Controllers
             _log.Info($"UserLogin called. BranchId={request.BranchId}, UserName={request.UserName}");
             try
             {
-                // Validate model
                 if (!ModelState.IsValid)
                 {
                     _log.Warn("Invalid login request model.");
@@ -50,9 +49,36 @@ namespace HISWEBAPI.Controllers
 
                 if (userId > 0)
                 {
+                    // Extract browser and device info
+                    var userAgent = Request.Headers["User-Agent"].ToString();
+                    var ipAddress = GetClientIpAddress();
+                    var (browser, browserVersion, os, device, deviceType) = BrowserDetectionHelper.ParseUserAgent(userAgent);
+
+                    // Create login session
+                    var sessionRequest = new LoginSessionRequest
+                    {
+                        UserId = userId,
+                        BranchId = request.BranchId,
+                        IpAddress = ipAddress,
+                        UserAgent = userAgent,
+                        Browser = browser,
+                        BrowserVersion = browserVersion,
+                        OperatingSystem = os,
+                        Device = device,
+                        DeviceType = deviceType,
+                        Location = null // Can be populated using IP geolocation service
+                    };
+
+                    long sessionId = _userRepository.CreateLoginSession(sessionRequest);
+
+                    if (sessionId == 0)
+                    {
+                        _log.Error("Failed to create login session.");
+                    }
+
                     // Generate JWT tokens
-                    var roles = new List<string> { "User" }; // You can fetch actual roles from database
-                    var email = $"{request.UserName}@hospital.com"; // Replace with actual email from database if available
+                    var roles = new List<string> { "User" };
+                    var email = $"{request.UserName}@hospital.com";
 
                     var accessToken = _jwtService.GenerateToken(
                         userId.ToString(),
@@ -63,10 +89,23 @@ namespace HISWEBAPI.Controllers
 
                     var refreshToken = _jwtService.GenerateRefreshToken();
 
-                    // TODO: Save refresh token to database for future use
-                    // Example: _userRepository.SaveRefreshToken(userId, refreshToken, DateTime.UtcNow.AddDays(7));
+                    // Save refresh token
+                    if (sessionId > 0)
+                    {
+                        bool tokenSaved = _userRepository.SaveRefreshToken(
+                            userId,
+                            sessionId,
+                            refreshToken,
+                            DateTime.UtcNow.AddDays(7)
+                        );
 
-                    _log.Info($"Login successful. UserId={userId}, Token generated.");
+                        if (!tokenSaved)
+                        {
+                            _log.Error($"Failed to save refresh token for sessionId={sessionId}");
+                        }
+                    }
+
+                    _log.Info($"Login successful. UserId={userId}, SessionId={sessionId}");
 
                     return Ok(new
                     {
@@ -77,10 +116,20 @@ namespace HISWEBAPI.Controllers
                             userId = userId,
                             userName = request.UserName,
                             branchId = request.BranchId,
+                            sessionId = sessionId,
                             accessToken = accessToken,
                             refreshToken = refreshToken,
                             tokenType = "Bearer",
-                            expiresIn = 3600 // 60 minutes in seconds
+                            expiresIn = 3600,
+                            loginInfo = new
+                            {
+                                ipAddress = ipAddress,
+                                browser = browser,
+                                browserVersion = browserVersion,
+                                operatingSystem = os,
+                                device = device,
+                                deviceType = deviceType
+                            }
                         }
                     });
                 }
@@ -123,16 +172,31 @@ namespace HISWEBAPI.Controllers
                 var roles = principal.FindAll(System.Security.Claims.ClaimTypes.Role)
                     .Select(c => c.Value).ToList();
 
-                // TODO: Validate refresh token from database
-                // Example: var isValidRefreshToken = _userRepository.ValidateRefreshToken(userId, request.RefreshToken);
-                // if (!isValidRefreshToken) return Unauthorized();
+                // Validate refresh token from database
+                var (isValid, sessionId, userIdFromToken) = _userRepository.ValidateRefreshToken(request.RefreshToken);
+
+                if (!isValid || userIdFromToken.ToString() != userId)
+                {
+                    _log.Warn($"Invalid refresh token for UserId={userId}");
+                    return Unauthorized(new { result = false, message = "Invalid or expired refresh token." });
+                }
 
                 // Generate new tokens
                 var newAccessToken = _jwtService.GenerateToken(userId ?? "", username ?? "", email ?? "", roles);
                 var newRefreshToken = _jwtService.GenerateRefreshToken();
 
-                // TODO: Update refresh token in database
-                // Example: _userRepository.UpdateRefreshToken(userId, newRefreshToken, DateTime.UtcNow.AddDays(7));
+                // Update refresh token in database
+                bool tokenSaved = _userRepository.SaveRefreshToken(
+                    userIdFromToken,
+                    sessionId,
+                    newRefreshToken,
+                    DateTime.UtcNow.AddDays(7)
+                );
+
+                if (!tokenSaved)
+                {
+                    _log.Error($"Failed to save new refresh token for sessionId={sessionId}");
+                }
 
                 _log.Info($"Token refreshed successfully for UserId={userId}");
 
@@ -159,7 +223,7 @@ namespace HISWEBAPI.Controllers
 
         [HttpPost("logout")]
         [Authorize]
-        public IActionResult Logout()
+        public IActionResult Logout([FromBody] LogoutRequest request)
         {
             _log.Info("Logout called.");
             try
@@ -167,8 +231,23 @@ namespace HISWEBAPI.Controllers
                 var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 var username = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
 
-                // TODO: Invalidate refresh token in database
-                // Example: _userRepository.InvalidateRefreshToken(userId);
+                if (request?.SessionId > 0)
+                {
+                    // Update session status to 'Logged Out'
+                    bool sessionUpdated = _userRepository.UpdateLoginSession(
+                        request.SessionId,
+                        "Logged Out",
+                        request.LogoutReason ?? "User Logout"
+                    );
+
+                    // Invalidate refresh token
+                    bool tokenInvalidated = _userRepository.InvalidateRefreshToken(request.SessionId);
+
+                    if (!sessionUpdated || !tokenInvalidated)
+                    {
+                        _log.Warn($"Failed to complete logout for SessionId={request.SessionId}");
+                    }
+                }
 
                 _log.Info($"User logged out successfully. UserId={userId}, UserName={username}");
 
@@ -179,6 +258,194 @@ namespace HISWEBAPI.Controllers
                 _log.Error($"Error during logout: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
                 return StatusCode(500, new { result = false, message = "Server error occurred during logout." });
+            }
+        }
+
+        [HttpPost("logoutAllSessions")]
+        [Authorize]
+        public IActionResult LogoutAllSessions()
+        {
+            _log.Info("LogoutAllSessions called.");
+            try
+            {
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { result = false, message = "Invalid user." });
+                }
+
+                bool result = _userRepository.InvalidateAllUserSessions(long.Parse(userId));
+
+                if (result)
+                {
+                    _log.Info($"All sessions logged out for UserId={userId}");
+                    return Ok(new { result = true, message = "All sessions logged out successfully." });
+                }
+
+                return StatusCode(500, new { result = false, message = "Failed to logout all sessions." });
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error during logoutAllSessions: {ex.Message}", ex);
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred." });
+            }
+        }
+
+        [HttpGet("loginHistory")]
+        [Authorize]
+        public IActionResult GetLoginHistory([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        {
+            _log.Info("GetLoginHistory called.");
+            try
+            {
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { result = false, message = "Invalid user." });
+                }
+
+                DataTable dt = _userRepository.GetUserLoginHistory(long.Parse(userId), pageNumber, pageSize);
+
+                if (dt == null || dt.Rows.Count == 0)
+                {
+                    return Ok(new { result = true, message = "No login history found.", data = new List<LoginHistoryResponse>() });
+                }
+
+                var history = dt.AsEnumerable().Select(row => new LoginHistoryResponse
+                {
+                    SessionId = Convert.ToInt64(row["SessionId"]),
+                    LoginTime = Convert.ToDateTime(row["LoginTime"]),
+                    LogoutTime = row["LogoutTime"] != DBNull.Value ? Convert.ToDateTime(row["LogoutTime"]) : (DateTime?)null,
+                    IpAddress = row["IpAddress"]?.ToString(),
+                    Browser = row["Browser"]?.ToString(),
+                    OperatingSystem = row["OperatingSystem"]?.ToString(),
+                    Device = row["Device"]?.ToString(),
+                    Location = row["Location"]?.ToString(),
+                    Status = row["Status"]?.ToString(),
+                    LogoutReason = row["LogoutReason"]?.ToString()
+                }).ToList();
+
+                _log.Info($"Login history retrieved for UserId={userId}");
+                return Ok(new { result = true, data = history });
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error retrieving login history: {ex.Message}", ex);
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred." });
+            }
+        }
+
+        [HttpGet("activeSessions")]
+        [Authorize]
+        public IActionResult GetActiveSessions()
+        {
+            _log.Info("GetActiveSessions called.");
+            try
+            {
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { result = false, message = "Invalid user." });
+                }
+
+                DataTable dt = _userRepository.GetActiveUserSessions(long.Parse(userId));
+
+                if (dt == null || dt.Rows.Count == 0)
+                {
+                    return Ok(new { result = true, message = "No active sessions found.", data = new List<ActiveSessionResponse>() });
+                }
+
+                var sessions = dt.AsEnumerable().Select(row => new ActiveSessionResponse
+                {
+                    SessionId = Convert.ToInt64(row["SessionId"]),
+                    LoginTime = Convert.ToDateTime(row["LoginTime"]),
+                    LastActivityTime = Convert.ToDateTime(row["LastActivityTime"]),
+                    IpAddress = row["IpAddress"]?.ToString(),
+                    Browser = row["Browser"]?.ToString(),
+                    OperatingSystem = row["OperatingSystem"]?.ToString(),
+                    Device = row["Device"]?.ToString(),
+                    IsCurrentSession = false // You can compare with current session if needed
+                }).ToList();
+
+                _log.Info($"Active sessions retrieved for UserId={userId}");
+                return Ok(new { result = true, data = sessions });
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error retrieving active sessions: {ex.Message}", ex);
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred." });
+            }
+        }
+
+        [HttpPost("terminateSession")]
+        [Authorize]
+        public IActionResult TerminateSession([FromBody] TerminateSessionRequest request)
+        {
+            _log.Info($"TerminateSession called. SessionId={request.SessionId}");
+            try
+            {
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { result = false, message = "Invalid user." });
+                }
+
+                // Update session status
+                bool sessionUpdated = _userRepository.UpdateLoginSession(
+                    request.SessionId,
+                    "Terminated",
+                    "Terminated by user from another device"
+                );
+
+                // Invalidate refresh token
+                bool tokenInvalidated = _userRepository.InvalidateRefreshToken(request.SessionId);
+
+                if (sessionUpdated && tokenInvalidated)
+                {
+                    _log.Info($"Session terminated successfully. SessionId={request.SessionId}");
+                    return Ok(new { result = true, message = "Session terminated successfully." });
+                }
+
+                return StatusCode(500, new { result = false, message = "Failed to terminate session." });
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error terminating session: {ex.Message}", ex);
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred." });
+            }
+        }
+
+        // Helper method to get client IP address
+        private string GetClientIpAddress()
+        {
+            try
+            {
+                var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+                // Check for X-Forwarded-For header (for proxies/load balancers)
+                if (Request.Headers.ContainsKey("X-Forwarded-For"))
+                {
+                    ipAddress = Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',').FirstOrDefault()?.Trim();
+                }
+                // Check for X-Real-IP header
+                else if (Request.Headers.ContainsKey("X-Real-IP"))
+                {
+                    ipAddress = Request.Headers["X-Real-IP"].FirstOrDefault();
+                }
+
+                return ipAddress ?? "Unknown";
+            }
+            catch
+            {
+                return "Unknown";
             }
         }
 
@@ -197,14 +464,12 @@ namespace HISWEBAPI.Controllers
 
                 var result = _userRepository.InsertUserMaster(request);
 
-                // Handle duplicate username
                 if (result == -1)
                 {
                     _log.Warn($"Duplicate username attempted: {request.UserName}");
                     return Conflict(new { result = false, message = "Username already exists. Please choose a different username." });
                 }
 
-                // Handle license limit
                 if (result == -2)
                 {
                     _log.Warn("License validation failed for user insert.");
@@ -232,7 +497,6 @@ namespace HISWEBAPI.Controllers
             }
         }
 
-
         [HttpPost("sendPasswordResetOtp")]
         public IActionResult SendPasswordResetOtp([FromBody] ForgotPasswordRequest request)
         {
@@ -251,7 +515,6 @@ namespace HISWEBAPI.Controllers
                     request.Contact
                 );
 
-                // Username doesn't exist
                 if (!userExists)
                 {
                     _log.Warn($"Username not found: {request.UserName}");
@@ -263,7 +526,6 @@ namespace HISWEBAPI.Controllers
                     });
                 }
 
-                // Username exists but contact doesn't match
                 if (!contactMatch)
                 {
                     _log.Warn($"Contact mismatch for username: {request.UserName}");
@@ -277,10 +539,7 @@ namespace HISWEBAPI.Controllers
                     });
                 }
 
-                // Generate OTP
                 string otp = GenerateOtp();
-
-                // Store OTP in database with 5 minute expiry
                 bool otpStored = _userRepository.StoreOtpForPasswordReset(userId, otp, 5);
 
                 if (!otpStored)
@@ -289,17 +548,14 @@ namespace HISWEBAPI.Controllers
                     return StatusCode(500, new { result = false, message = "Failed to generate OTP. Please try again." });
                 }
 
-                // Send OTP via SMS
                 bool smsSent = _smsService.SendOtp(registeredContact, otp);
 
                 if (!smsSent)
                 {
                     _log.Error($"Failed to send SMS to: {registeredContact}");
-                    // Note: OTP is already stored in DB, so we still return success but log the SMS failure
                     _log.Warn($"OTP stored but SMS failed for user: {request.UserName}");
                 }
 
-                // Log OTP for development/testing
                 _log.Info($"OTP generated for user {request.UserName}: {otp}");
 
                 string contactHintSuccess = GenerateContactHint(registeredContact);
@@ -322,11 +578,10 @@ namespace HISWEBAPI.Controllers
             }
         }
 
-        // OTP Generation method (6-digit OTP)
         private string GenerateOtp()
         {
             Random random = new Random();
-            return random.Next(100000, 999999).ToString(); // 6-digit OTP
+            return random.Next(100000, 999999).ToString();
         }
 
         private string GenerateContactHint(string contact)
@@ -348,7 +603,6 @@ namespace HISWEBAPI.Controllers
             return $"{first2}{middle}{last2}";
         }
 
-
         [HttpPost("verifyOtpAndResetPassword")]
         public IActionResult VerifyOtpAndResetPassword([FromBody] VerifyOtpAndResetPasswordRequest request)
         {
@@ -362,9 +616,7 @@ namespace HISWEBAPI.Controllers
                     return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
                 }
 
-                // Hash the new password before storing
                 string hashedPassword = PasswordHasher.HashPassword(request.NewPassword);
-                //string hashedPassword = request.NewPassword;
 
                 var (result, message) = _userRepository.VerifyOtpAndResetPassword(
                     request.UserName,
@@ -372,10 +624,9 @@ namespace HISWEBAPI.Controllers
                     hashedPassword
                 );
 
-                // Handle different result codes
                 switch (result)
                 {
-                    case 1: // Success
+                    case 1:
                         _log.Info($"Password reset successfully for user: {request.UserName}");
                         return Ok(new VerifyOtpAndResetPasswordResponse
                         {
@@ -383,7 +634,7 @@ namespace HISWEBAPI.Controllers
                             Message = message
                         });
 
-                    case -1: // User not found
+                    case -1:
                         _log.Warn($"User not found: {request.UserName}");
                         return NotFound(new VerifyOtpAndResetPasswordResponse
                         {
@@ -391,7 +642,7 @@ namespace HISWEBAPI.Controllers
                             Message = message
                         });
 
-                    case -2: // User inactive
+                    case -2:
                         _log.Warn($"Inactive user attempted password reset: {request.UserName}");
                         return BadRequest(new VerifyOtpAndResetPasswordResponse
                         {
@@ -399,9 +650,9 @@ namespace HISWEBAPI.Controllers
                             Message = message
                         });
 
-                    case -3: // No OTP found
-                    case -4: // OTP expired
-                    case -5: // Max attempts exceeded
+                    case -3:
+                    case -4:
+                    case -5:
                         _log.Warn($"OTP validation failed for user {request.UserName}: {message}");
                         return BadRequest(new VerifyOtpAndResetPasswordResponse
                         {
@@ -409,7 +660,7 @@ namespace HISWEBAPI.Controllers
                             Message = message
                         });
 
-                    case -6: // Invalid OTP
+                    case -6:
                         _log.Warn($"Invalid OTP entered for user: {request.UserName}");
                         return BadRequest(new VerifyOtpAndResetPasswordResponse
                         {
@@ -417,7 +668,7 @@ namespace HISWEBAPI.Controllers
                             Message = message
                         });
 
-                    default: // Unknown error
+                    default:
                         _log.Error($"Unknown error during password reset for user: {request.UserName}. Result code: {result}");
                         return StatusCode(500, new VerifyOtpAndResetPasswordResponse
                         {
@@ -434,5 +685,63 @@ namespace HISWEBAPI.Controllers
             }
         }
 
+        [HttpPost("updatePassword")]
+        [Authorize]
+        public IActionResult UpdatePassword([FromBody] UpdatePasswordRequest model)
+        {
+            _log.Info($"UpdatePassword called. UserId={model.UserId}");
+            try
+            {
+                var (result, message) = _userRepository.UpdateUserPassword(model);
+
+                if (!result)
+                {
+                    _log.Warn($"{message} UserId={model.UserId}");
+                    return BadRequest(new { result = false, message });
+                }
+
+                _log.Info($"Password Updated successfully for UserId={model.UserId}");
+                return Ok(new { result = true, message });
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred." });
+            }
+        }
+
+        [HttpPost("getUserRoles")]
+        [Authorize]
+        public IActionResult GetUserRoles([FromBody] UserRoleRequest request)
+        {
+            _log.Info($"GetUserRoles called. UserId={request.UserId}");
+            try
+            {
+                DataTable dt = _userRepository.GetLoginUserRoles(request);
+
+                if (dt == null || dt.Rows.Count == 0)
+                {
+                    _log.Warn($"No roles found for this user. UserId={request.UserId}");
+                    return NotFound(new { result = false, message = "No roles found for this user." });
+                }
+
+                var roles = dt.AsEnumerable().Select(row => new
+                {
+                    RoleId = row["RoleId"],
+                    RoleName = row["RoleName"]
+                });
+                _log.Info($"GetUserRoles successfully for UserId={request.UserId}");
+                return Ok(new { result = true, roles });
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred." });
+            }
+        }
     }
+
+    
+
+   
 }
