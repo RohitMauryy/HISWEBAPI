@@ -4,9 +4,8 @@ using HISWEBAPI.Attributes;
 
 namespace HISWEBAPI.DTO.User
 {
-    public class UserMasterRequest
+    public class UserSignupRequest
     {
-        public long? UserId { get; set; }
 
         [Required(ErrorMessage = "First name is required")]
         [StringLength(100)]
@@ -39,7 +38,7 @@ namespace HISWEBAPI.DTO.User
         [RegularExpression(@"^\d{10}$", ErrorMessage = "Contact must be exactly 10 digits")]
         public string Contact { get; set; }
 
-        [StringLength(250)]
+        [StringLength(500)]
         public string Address { get; set; }
 
         [Required(ErrorMessage = "Date of birth is required")]
@@ -49,7 +48,5 @@ namespace HISWEBAPI.DTO.User
         [RegularExpression("^(Male|Female|Other)$", ErrorMessage = "Gender must be Male, Female, or Other")]
         public string Gender { get; set; }
 
-        public string EmployeeID { get; set; }
-        public bool IsActive { get; set; } = true;
     }
 }

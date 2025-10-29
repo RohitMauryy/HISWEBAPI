@@ -57,6 +57,7 @@ public static class DependencyInjection
     private static void RegisterBusinessServices(IServiceCollection services)
     {
            services.AddScoped<ISmsService, SmsService>();
+           services.AddScoped<IEmailService, EmailService>();
     }
 
     private static void RegisterCaching(IServiceCollection services, IConfiguration configuration)

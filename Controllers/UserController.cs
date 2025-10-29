@@ -12,6 +12,7 @@ using HISWEBAPI.Services;
 using HISWEBAPI.Utilities;
 using System.Data;
 using Azure.Core;
+using Microsoft.AspNetCore.Identity.Data;
 
 namespace HISWEBAPI.Controllers
 {
@@ -21,19 +22,24 @@ namespace HISWEBAPI.Controllers
     {
         private readonly IUserRepository _userRepository;
         private readonly ISmsService _smsService;
+        private readonly IEmailService _emailService;
         private readonly IJwtService _jwtService;
         private static readonly ILog _log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        public UserController(IUserRepository userRepository, ISmsService smsService, IJwtService jwtService)
+        public UserController(
+            IUserRepository userRepository,
+            ISmsService smsService,
+            IJwtService jwtService,
+            IEmailService emailService)
         {
             _userRepository = userRepository;
             _smsService = smsService;
             _jwtService = jwtService;
+            _emailService = emailService;
         }
-
         [HttpPost("userLogin")]
         [AllowAnonymous]
-        public IActionResult UserLogin([FromBody] LoginRequest request)
+        public IActionResult UserLogin([FromBody] DTO.User.UserLoginRequest request)
         {
             _log.Info($"UserLogin called. BranchId={request.BranchId}, UserName={request.UserName}");
             try
@@ -45,9 +51,9 @@ namespace HISWEBAPI.Controllers
                 }
 
                 // Authenticate user
-                var userId = _userRepository.UserLogin(request.BranchId, request.UserName, request.Password);
+                var loginResponse = _userRepository.UserLogin(request.BranchId, request.UserName, request.Password);
 
-                if (userId > 0)
+                if (loginResponse != null && loginResponse.UserId > 0)
                 {
                     // Extract browser and device info
                     var userAgent = Request.Headers["User-Agent"].ToString();
@@ -57,7 +63,7 @@ namespace HISWEBAPI.Controllers
                     // Create login session
                     var sessionRequest = new LoginSessionRequest
                     {
-                        UserId = userId,
+                        UserId = loginResponse.UserId,
                         BranchId = request.BranchId,
                         IpAddress = ipAddress,
                         UserAgent = userAgent,
@@ -77,14 +83,11 @@ namespace HISWEBAPI.Controllers
                     }
 
                     // Generate JWT tokens
-                    var roles = new List<string> { "User" };
-                    var email = $"{request.UserName}@hospital.com";
 
                     var accessToken = _jwtService.GenerateToken(
-                        userId.ToString(),
+                        loginResponse.UserId.ToString(),
                         request.UserName,
-                        email,
-                        roles
+                        loginResponse.Email
                     );
 
                     var refreshToken = _jwtService.GenerateRefreshToken();
@@ -93,10 +96,10 @@ namespace HISWEBAPI.Controllers
                     if (sessionId > 0)
                     {
                         bool tokenSaved = _userRepository.SaveRefreshToken(
-                            userId,
+                            loginResponse.UserId,
                             sessionId,
                             refreshToken,
-                            DateTime.UtcNow.AddDays(7)
+                            DateTime.UtcNow.AddDays(1)
                         );
 
                         if (!tokenSaved)
@@ -105,7 +108,7 @@ namespace HISWEBAPI.Controllers
                         }
                     }
 
-                    _log.Info($"Login successful. UserId={userId}, SessionId={sessionId}");
+                    _log.Info($"Login successful. UserId={loginResponse.UserId}, SessionId={sessionId}");
 
                     return Ok(new
                     {
@@ -113,8 +116,12 @@ namespace HISWEBAPI.Controllers
                         message = "Login successful",
                         data = new
                         {
-                            userId = userId,
+                            userId = loginResponse.UserId,
                             userName = request.UserName,
+                            email = loginResponse.Email,
+                            contact = loginResponse.Contact,
+                            isContactVerified = loginResponse.IsContactVerified,
+                            isEmailVerified = loginResponse.IsEmailVerified,
                             branchId = request.BranchId,
                             sessionId = sessionId,
                             accessToken = accessToken,
@@ -449,10 +456,10 @@ namespace HISWEBAPI.Controllers
             }
         }
 
-        [HttpPost("insertUserMaster")]
-        public IActionResult InsertUserMaster([FromBody] UserMasterRequest request)
+        [HttpPost("NewUserSignUp")]
+        public IActionResult NewUserSignUp([FromBody] UserSignupRequest request)
         {
-            _log.Info($"InsertUserMaster called. UserName={request.UserName}");
+            _log.Info($"NewUserSignUp called. UserName={request.UserName}");
 
             try
             {
@@ -462,7 +469,7 @@ namespace HISWEBAPI.Controllers
                     return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
                 }
 
-                var result = _userRepository.InsertUserMaster(request);
+                var result = _userRepository.NewUserSignUp(request);
 
                 if (result == -1)
                 {
@@ -478,10 +485,8 @@ namespace HISWEBAPI.Controllers
 
                 if (result > 0)
                 {
-                    _log.Info($"User inserted/updated successfully. UserId={result}");
-                    string message = request.UserId.HasValue && request.UserId.Value > 0
-                        ? "User updated successfully."
-                        : "User created successfully.";
+                    _log.Info($"User inserted successfully. UserId={result}");
+                    string message = "User created successfully.";
 
                     return Ok(new { result = true, userId = result, message });
                 }
@@ -491,22 +496,26 @@ namespace HISWEBAPI.Controllers
             }
             catch (Exception ex)
             {
-                _log.Error($"Error in InsertUserMaster: {ex.Message}", ex);
+                _log.Error($"Error in NewUserSignUp: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
                 return StatusCode(500, new { result = false, message = "Server error occurred." });
             }
         }
 
-        [HttpPost("sendPasswordResetOtp")]
-        public IActionResult SendPasswordResetOtp([FromBody] ForgotPasswordRequest request)
+        // ==================== SMS OTP PASSWORD RESET - 3 API FLOW ====================
+
+        // API 1: Send OTP via SMS
+        [HttpPost("sendSmsOtp")]
+        [AllowAnonymous]
+        public IActionResult SendSmsOtp([FromBody] SendSmsOtpRequest request)
         {
-            _log.Info($"sendPasswordResetOtp called. UserName={request.UserName}");
+            _log.Info($"sendSmsOtp called. UserName={request.UserName}");
 
             try
             {
                 if (!ModelState.IsValid)
                 {
-                    _log.Warn("Invalid model state for forgot password.");
+                    _log.Warn("Invalid model state for send SMS OTP.");
                     return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
                 }
 
@@ -518,11 +527,10 @@ namespace HISWEBAPI.Controllers
                 if (!userExists)
                 {
                     _log.Warn($"Username not found: {request.UserName}");
-                    return NotFound(new ForgotPasswordResponse
+                    return NotFound(new
                     {
-                        Result = false,
-                        Message = "Username does not exist. Please check and try again.",
-                        ContactHint = null
+                        result = false,
+                        message = "Username does not exist. Please check and try again."
                     });
                 }
 
@@ -531,11 +539,11 @@ namespace HISWEBAPI.Controllers
                     _log.Warn($"Contact mismatch for username: {request.UserName}");
                     string contactHint = GenerateContactHint(registeredContact);
 
-                    return BadRequest(new ForgotPasswordResponse
+                    return BadRequest(new
                     {
-                        Result = false,
-                        Message = "Contact number does not match. Please check the registered contact hint.",
-                        ContactHint = contactHint
+                        result = false,
+                        message = "Contact number does not match. Please check the registered contact hint.",
+                        contactHint = contactHint
                     });
                 }
 
@@ -562,129 +570,333 @@ namespace HISWEBAPI.Controllers
 
                 _log.Info($"OTP sent successfully for username: {request.UserName}, UserId: {userId}");
 
-                return Ok(new ForgotPasswordResponse
+                return Ok(new
                 {
-                    Result = true,
-                    Message = $"OTP sent successfully on contact no. {contactHintSuccess}",
-                    ContactHint = contactHintSuccess,
-                    UserId = userId
+                    result = true,
+                    message = $"OTP sent successfully to {contactHintSuccess}",
+                    userId = userId,
+                    contactHint = contactHintSuccess
                 });
             }
             catch (Exception ex)
             {
-                _log.Error($"Error in sendPasswordResetOtp: {ex.Message}", ex);
+                _log.Error($"Error in sendSmsOtp: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
                 return StatusCode(500, new { result = false, message = "Server error occurred." });
             }
         }
 
-        private string GenerateOtp()
+        // API 2: Verify SMS OTP
+        [HttpPost("verifySmsOtp")]
+        [AllowAnonymous]
+        public IActionResult VerifySmsOtp([FromBody] VerifySmsOtpRequest request)
         {
-            Random random = new Random();
-            return random.Next(100000, 999999).ToString();
-        }
-
-        private string GenerateContactHint(string contact)
-        {
-            if (string.IsNullOrEmpty(contact))
-                return string.Empty;
-
-            int length = contact.Length;
-
-            if (length < 4)
-            {
-                return new string('*', length);
-            }
-
-            string first2 = contact.Substring(0, 2);
-            string last2 = contact.Substring(length - 2, 2);
-            string middle = new string('*', length - 4);
-
-            return $"{first2}{middle}{last2}";
-        }
-
-        [HttpPost("verifyOtpAndResetPassword")]
-        public IActionResult VerifyOtpAndResetPassword([FromBody] VerifyOtpAndResetPasswordRequest request)
-        {
-            _log.Info($"VerifyOtpAndResetPassword called. UserName={request.UserName}");
+            _log.Info($"verifySmsOtp called. UserId={request.UserId}");
 
             try
             {
                 if (!ModelState.IsValid)
                 {
-                    _log.Warn("Invalid model state for OTP verification.");
+                    _log.Warn("Invalid model state for verify SMS OTP.");
                     return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
                 }
 
-                string hashedPassword = PasswordHasher.HashPassword(request.NewPassword);
-
-                var (result, message) = _userRepository.VerifyOtpAndResetPassword(
-                    request.UserName,
-                    request.Otp,
-                    hashedPassword
-                );
+                var (result, message) = _userRepository.VerifySmsOtp(request.UserId, request.Otp);
 
                 switch (result)
                 {
                     case 1:
-                        _log.Info($"Password reset successfully for user: {request.UserName}");
-                        return Ok(new VerifyOtpAndResetPasswordResponse
+                        _log.Info($"OTP verified successfully for UserId: {request.UserId}");
+                        return Ok(new
                         {
-                            Result = true,
-                            Message = message
+                            result = true,
+                            message = message,
+                            userId = request.UserId,
+                            otp = request.Otp
                         });
 
                     case -1:
-                        _log.Warn($"User not found: {request.UserName}");
-                        return NotFound(new VerifyOtpAndResetPasswordResponse
+                        _log.Warn($"User not found: UserId={request.UserId}");
+                        return NotFound(new
                         {
-                            Result = false,
-                            Message = message
+                            result = false,
+                            message = message,
+                            userId = request.UserId,
+                            otp = request.Otp
                         });
 
                     case -2:
-                        _log.Warn($"Inactive user attempted password reset: {request.UserName}");
-                        return BadRequest(new VerifyOtpAndResetPasswordResponse
+                        _log.Warn($"Inactive user attempted OTP verification: UserId={request.UserId}");
+                        return BadRequest(new
                         {
-                            Result = false,
-                            Message = message
+                            result = false,
+                            message = message,
+                            userId = request.UserId,
+                            otp = request.Otp
                         });
 
                     case -3:
                     case -4:
                     case -5:
-                        _log.Warn($"OTP validation failed for user {request.UserName}: {message}");
-                        return BadRequest(new VerifyOtpAndResetPasswordResponse
+                        _log.Warn($"OTP validation failed for UserId {request.UserId}: {message}");
+                        return BadRequest(new
                         {
-                            Result = false,
-                            Message = message
+                            result = false,
+                            message = message,
+                            userId = request.UserId,
+                            otp = request.Otp
                         });
 
                     case -6:
-                        _log.Warn($"Invalid OTP entered for user: {request.UserName}");
-                        return BadRequest(new VerifyOtpAndResetPasswordResponse
+                        _log.Warn($"Invalid OTP entered for UserId: {request.UserId}");
+                        return BadRequest(new
                         {
-                            Result = false,
-                            Message = message
+                            result = false,
+                            message = message,
+                            userId = request.UserId,
+                            otp = request.Otp
                         });
 
                     default:
-                        _log.Error($"Unknown error during password reset for user: {request.UserName}. Result code: {result}");
-                        return StatusCode(500, new VerifyOtpAndResetPasswordResponse
+                        _log.Error($"Unknown error during OTP verification for UserId: {request.UserId}. Result code: {result}");
+                        return StatusCode(500, new
                         {
-                            Result = false,
-                            Message = message
+                            result = false,
+                            message = message,
+                            userId = request.UserId,
+                            otp = request.Otp
                         });
                 }
             }
             catch (Exception ex)
             {
-                _log.Error($"Error in VerifyOtpAndResetPassword: {ex.Message}", ex);
+                _log.Error($"Error in verifySmsOtp: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
                 return StatusCode(500, new { result = false, message = "Server error occurred." });
             }
         }
 
+        // API 3: Reset Password 
+
+        [HttpPost("resetPasswordByUserId")]
+        [AllowAnonymous]
+        public IActionResult ResetPasswordByUserId([FromBody] DTO.User.ResetPasswordRequest request)
+        {
+            _log.Info($"ResetPasswordByUserId called. UserId={request.UserId}");
+
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    _log.Warn("Invalid model state for reset password.");
+                    return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
+                }
+
+                if (request.NewPassword != request.ConfirmPassword)
+                {
+                    _log.Warn($"Password mismatch for UserId: {request.UserId}");
+                    return BadRequest(new
+                    {
+                        result = false,
+                        message = "New password and confirm password do not match."
+                    });
+                }
+
+                string hashedPassword = PasswordHasher.HashPassword(request.NewPassword);
+
+                var (result, message) = _userRepository.ResetPasswordByUserId(request.UserId,request.Otp, hashedPassword);
+
+                if (result)
+                {
+                    _log.Info($"Password reset successfully for UserId: {request.UserId}");
+                    return Ok(new
+                    {
+                        result = true,
+                        message = message
+                    });
+                }
+                else
+                {
+                    _log.Warn($"Password reset failed for UserId: {request.UserId}. Message: {message}");
+                    return BadRequest(new
+                    {
+                        result = false,
+                        message = message
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error in ResetPasswordByUserId: {ex.Message}", ex);
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred." });
+            }
+        }
+
+
+        // ==================== EMAIL Verify by OTP  - 2 API FLOW ====================
+
+        // API 1: Send OTP via Email
+        [HttpPost("sendEmailOtp")]
+        [AllowAnonymous]
+        public async Task<IActionResult> SendEmailOtp([FromBody] SendEmailOtpRequest request)
+        {
+            _log.Info($"sendEmailOtp called. UserName={request.UserName}");
+
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    _log.Warn("Invalid model state for send email OTP.");
+                    return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
+                }
+
+                var (userExists, emailMatch, userId, registeredEmail) = _userRepository.ValidateUserForEmailPasswordReset(
+                    request.UserName,
+                    request.Email
+                );
+
+                if (!userExists)
+                {
+                    _log.Warn($"Username not found: {request.UserName}");
+                    return NotFound(new
+                    {
+                        result = false,
+                        message = "Username does not exist. Please check and try again."
+                    });
+                }
+
+                if (!emailMatch)
+                {
+                    _log.Warn($"Email mismatch for username: {request.UserName}");
+                    string emailHint = GenerateEmailHint(registeredEmail);
+
+                    return BadRequest(new
+                    {
+                        result = false,
+                        message = "Email address does not match. Please check the registered email hint.",
+                        emailHint = emailHint
+                    });
+                }
+
+                string otp = GenerateOtp();
+                bool otpStored = _userRepository.StoreEmailOtpForPasswordReset(userId, otp, 5);
+
+                if (!otpStored)
+                {
+                    _log.Error($"Failed to store OTP for user: {request.UserName}");
+                    return StatusCode(500, new { result = false, message = "Failed to generate OTP. Please try again." });
+                }
+
+                bool emailSent = await _emailService.SendOtpEmail(registeredEmail, otp, "Password Reset");
+
+                if (!emailSent)
+                {
+                    _log.Error($"Failed to send email to: {registeredEmail}");
+                    return StatusCode(500, new { result = false, message = "Failed to send OTP email. Please try again." });
+                }
+
+                _log.Info($"OTP generated and sent via email for user {request.UserName}: {otp}");
+
+                string emailHintSuccess = GenerateEmailHint(registeredEmail);
+
+                _log.Info($"OTP sent successfully via email for username: {request.UserName}, UserId: {userId}");
+
+                return Ok(new
+                {
+                    result = true,
+                    message = $"OTP sent successfully to {emailHintSuccess}",
+                    userId = userId,
+                    emailHint = emailHintSuccess
+                });
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error in sendEmailOtp: {ex.Message}", ex);
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred." });
+            }
+        }
+
+        // API 2: Verify Email OTP
+        [HttpPost("verifyEmailOtp")]
+        [AllowAnonymous]
+        public IActionResult VerifyEmailOtp([FromBody] VerifyEmailOtpRequest request)
+        {
+            _log.Info($"verifyEmailOtp called. UserId={request.UserId}");
+
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    _log.Warn("Invalid model state for verify email OTP.");
+                    return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
+                }
+
+                var (result, message) = _userRepository.VerifyEmailOtp(request.UserId, request.Otp);
+
+                switch (result)
+                {
+                    case 1:
+                        _log.Info($"Email OTP verified successfully for UserId: {request.UserId}");
+                        return Ok(new
+                        {
+                            result = true,
+                            message = message
+                        });
+
+                    case -1:
+                        _log.Warn($"User not found: UserId={request.UserId}");
+                        return NotFound(new
+                        {
+                            result = false,
+                            message = message
+                        });
+
+                    case -2:
+                        _log.Warn($"Inactive user attempted OTP verification: UserId={request.UserId}");
+                        return BadRequest(new
+                        {
+                            result = false,
+                            message = message
+                        });
+
+                    case -3:
+                    case -4:
+                    case -5:
+                        _log.Warn($"Email OTP validation failed for UserId {request.UserId}: {message}");
+                        return BadRequest(new
+                        {
+                            result = false,
+                            message = message
+                        });
+
+                    case -6:
+                        _log.Warn($"Invalid email OTP entered for UserId: {request.UserId}");
+                        return BadRequest(new
+                        {
+                            result = false,
+                            message = message
+                        });
+
+                    default:
+                        _log.Error($"Unknown error during email OTP verification for UserId: {request.UserId}. Result code: {result}");
+                        return StatusCode(500, new
+                        {
+                            result = false,
+                            message = message
+                        });
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error in verifyEmailOtp: {ex.Message}", ex);
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred." });
+            }
+        }
+
+      
         [HttpPost("updatePassword")]
         [Authorize]
         public IActionResult UpdatePassword([FromBody] UpdatePasswordRequest model)
@@ -739,9 +951,55 @@ namespace HISWEBAPI.Controllers
                 return StatusCode(500, new { result = false, message = "Server error occurred." });
             }
         }
+
+        // Helper methods
+        private string GenerateOtp()
+        {
+            Random random = new Random();
+            return random.Next(100000, 999999).ToString();
+        }
+
+        private string GenerateContactHint(string contact)
+        {
+            if (string.IsNullOrEmpty(contact))
+                return string.Empty;
+
+            int length = contact.Length;
+
+            if (length < 4)
+            {
+                return new string('*', length);
+            }
+
+            string first2 = contact.Substring(0, 2);
+            string last2 = contact.Substring(length - 2, 2);
+            string middle = new string('*', length - 4);
+
+            return $"{first2}{middle}{last2}";
+        }
+
+        private string GenerateEmailHint(string email)
+        {
+            if (string.IsNullOrEmpty(email))
+                return string.Empty;
+
+            var parts = email.Split('@');
+            if (parts.Length != 2)
+                return email;
+
+            string localPart = parts[0];
+            string domain = parts[1];
+
+            if (localPart.Length <= 2)
+            {
+                return $"{new string('*', localPart.Length)}@{domain}";
+            }
+
+            string first2 = localPart.Substring(0, 2);
+            string lastChar = localPart.Substring(localPart.Length - 1, 1);
+            string middle = new string('*', localPart.Length - 3);
+
+            return $"{first2}{middle}{lastChar}@{domain}";
+        }
     }
-
-    
-
-   
 }

@@ -35,7 +35,7 @@ namespace HISWEBAPI.Services.Implementations
 
                 // Create OTP message
                 // Dont Modify this OTP Template message Format
-                string message = $"Your OTP for password reset is : {otp}. Valid for 5 minutes. Do not share with anyone.";
+                   string message = $"Your OTP for password reset is: {otp}. Valid for 5 minutes. Do not share with anyone Regards GRAVTT WEB TECHNOLOGIES";
 
                 // Replace placeholders in API URL
                 smsApiUrl = smsApiUrl.Replace("##U+0026##", "&");

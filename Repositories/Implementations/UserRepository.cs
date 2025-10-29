@@ -17,7 +17,7 @@ namespace HISWEBAPI.Repositories.Implementations
             _sqlHelper = sqlHelper;
         }
 
-        public long UserLogin(int branchId, string userName, string password)
+        public UserLoginResponse UserLogin(int branchId, string userName, string password)
         {
             DataTable dt = _sqlHelper.GetDataTable("sp_S_Login", CommandType.StoredProcedure, new
             {
@@ -26,24 +26,30 @@ namespace HISWEBAPI.Repositories.Implementations
             });
 
             if (dt == null || dt.Rows.Count == 0)
-                return 0;
+                return null;
 
             DataRow userRow = dt.Rows[0];
             string storedHash = Convert.ToString(userRow["Password"]);
-
             bool isPasswordValid = PasswordHasher.VerifyPassword(password, storedHash);
 
             if (isPasswordValid)
-                return Convert.ToInt64(userRow["Id"]);
+            {
+                return new UserLoginResponse
+                {
+                    UserId = (int)Convert.ToInt64(userRow["Id"]),
+                    Email = Convert.ToString(userRow["Email"]),
+                    Contact = Convert.ToString(userRow["Contact"]),
+                    IsContactVerified = Convert.ToBoolean(userRow["IsContactVerified"]),
+                    IsEmailVerified = Convert.ToBoolean(userRow["IsEmailVerified"])
+                };
+            }
 
-            return 0;
+            return null;
         }
-
-        public long InsertUserMaster(UserMasterRequest request)
+        public long NewUserSignUp(UserSignupRequest request)
         {
             SqlParameter[] parameters = new SqlParameter[]
             {
-                new SqlParameter("@HospId", 1),
                 new SqlParameter("@Address", request.Address ?? (object)DBNull.Value),
                 new SqlParameter("@Contact", request.Contact ?? (object)DBNull.Value),
                 new SqlParameter("@DOB", request.DOB != default(DateTime) ? (object)request.DOB : DBNull.Value),
@@ -54,16 +60,13 @@ namespace HISWEBAPI.Repositories.Implementations
                 new SqlParameter("@Password", PasswordHasher.HashPassword(request.Password)),
                 new SqlParameter("@UserName", request.UserName),
                 new SqlParameter("@Gender", request.Gender ?? (object)DBNull.Value),
-                new SqlParameter("@UserId", request.UserId.HasValue && request.UserId.Value > 0
-                    ? (object)request.UserId.Value
-                    : DBNull.Value),
-                new SqlParameter("@IsActive", request.IsActive),
-                new SqlParameter("@EmployeeID", request.EmployeeID ?? (object)DBNull.Value),
                 new SqlParameter("@Result", SqlDbType.BigInt) { Direction = ParameterDirection.Output }
             };
 
-            return _sqlHelper.RunProcedureInsert("sp_I_UserMaster", parameters);
+            return _sqlHelper.RunProcedureInsert("I_NewUserSignUp", parameters);
         }
+
+        // ==================== SMS OTP Methods ====================
 
         public (bool userExists, bool contactMatch, long userId, string registeredContact) ValidateUserForPasswordReset(string userName, string contact)
         {
@@ -87,25 +90,6 @@ namespace HISWEBAPI.Repositories.Implementations
             return (userExists, contactMatch, userId, registeredContact);
         }
 
-        public (int result, string message) VerifyOtpAndResetPassword(string userName, string otp, string newPassword)
-        {
-            SqlParameter[] parameters = new SqlParameter[]
-            {
-                new SqlParameter("@UserName", userName),
-                new SqlParameter("@Otp", otp),
-                new SqlParameter("@NewPassword", newPassword),
-                new SqlParameter("@Result", SqlDbType.Int) { Direction = ParameterDirection.Output },
-                new SqlParameter("@Message", SqlDbType.NVarChar, 255) { Direction = ParameterDirection.Output }
-            };
-
-            _sqlHelper.RunProcedure("sp_VerifyOtpAndResetPassword", parameters);
-
-            int result = parameters[3].Value != DBNull.Value ? Convert.ToInt32(parameters[3].Value) : 0;
-            string message = parameters[4].Value != DBNull.Value ? parameters[4].Value.ToString() : "Unknown error";
-
-            return (result, message);
-        }
-
         public bool StoreOtpForPasswordReset(long userId, string otp, int expiryMinutes)
         {
             try
@@ -124,6 +108,115 @@ namespace HISWEBAPI.Repositories.Implementations
             catch (Exception ex)
             {
                 return false;
+            }
+        }
+
+        public (int result, string message) VerifySmsOtp(long userId, string otp)
+        {
+            SqlParameter[] parameters = new SqlParameter[]
+            {
+                new SqlParameter("@UserId", userId),
+                new SqlParameter("@Otp", otp),
+                new SqlParameter("@Result", SqlDbType.Int) { Direction = ParameterDirection.Output },
+                new SqlParameter("@Message", SqlDbType.NVarChar, 255) { Direction = ParameterDirection.Output }
+            };
+
+            _sqlHelper.RunProcedure("sp_VerifySmsOtp", parameters);
+
+            int result = parameters[2].Value != DBNull.Value ? Convert.ToInt32(parameters[2].Value) : 0;
+            string message = parameters[3].Value != DBNull.Value ? parameters[3].Value.ToString() : "Unknown error";
+
+            return (result, message);
+        }
+
+        // ==================== EMAIL OTP Methods ====================
+
+        public (bool userExists, bool emailMatch, long userId, string registeredEmail) ValidateUserForEmailPasswordReset(string userName, string email)
+        {
+            SqlParameter[] parameters = new SqlParameter[]
+            {
+                new SqlParameter("@UserName", userName),
+                new SqlParameter("@Email", email),
+                new SqlParameter("@UserExists", SqlDbType.Bit) { Direction = ParameterDirection.Output },
+                new SqlParameter("@EmailMatch", SqlDbType.Bit) { Direction = ParameterDirection.Output },
+                new SqlParameter("@UserId", SqlDbType.BigInt) { Direction = ParameterDirection.Output },
+                new SqlParameter("@RegisteredEmail", SqlDbType.NVarChar, 255) { Direction = ParameterDirection.Output }
+            };
+
+            _sqlHelper.RunProcedure("sp_ValidateUserForEmailPasswordReset", parameters);
+
+            bool userExists = parameters[2].Value != DBNull.Value && (bool)parameters[2].Value;
+            bool emailMatch = parameters[3].Value != DBNull.Value && (bool)parameters[3].Value;
+            long userId = parameters[4].Value != DBNull.Value ? Convert.ToInt64(parameters[4].Value) : 0;
+            string registeredEmail = parameters[5].Value != DBNull.Value ? parameters[5].Value.ToString() : string.Empty;
+
+            return (userExists, emailMatch, userId, registeredEmail);
+        }
+
+        public bool StoreEmailOtpForPasswordReset(long userId, string otp, int expiryMinutes)
+        {
+            try
+            {
+                var result = _sqlHelper.GetDataTable("sp_StoreEmailOtpForPasswordReset", CommandType.StoredProcedure,
+                    new { UserId = userId, Otp = otp, ExpiryMinutes = expiryMinutes });
+
+                if (result != null && result.Rows.Count > 0)
+                {
+                    int resultValue = Convert.ToInt32(result.Rows[0]["Result"]);
+                    return resultValue == 1;
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                return false;
+            }
+        }
+
+        public (int result, string message) VerifyEmailOtp(long userId, string otp)
+        {
+            SqlParameter[] parameters = new SqlParameter[]
+            {
+                new SqlParameter("@UserId", userId),
+                new SqlParameter("@Otp", otp),
+                new SqlParameter("@Result", SqlDbType.Int) { Direction = ParameterDirection.Output },
+                new SqlParameter("@Message", SqlDbType.NVarChar, 255) { Direction = ParameterDirection.Output }
+            };
+
+            _sqlHelper.RunProcedure("sp_VerifyEmailOtp", parameters);
+
+            int result = parameters[2].Value != DBNull.Value ? Convert.ToInt32(parameters[2].Value) : 0;
+            string message = parameters[3].Value != DBNull.Value ? parameters[3].Value.ToString() : "Unknown error";
+
+            return (result, message);
+        }
+
+        // ==================== Common Password Reset Method ====================
+
+        public (bool result, string message) ResetPasswordByUserId(long userId,string otp, string hashedPassword)
+        {
+            try
+            {
+                SqlParameter[] parameters = new SqlParameter[]
+                {
+                    new SqlParameter("@UserId", userId),
+                    new SqlParameter("@otp", otp),
+                    new SqlParameter("@NewPassword", hashedPassword),
+                    new SqlParameter("@Result", SqlDbType.Bit) { Direction = ParameterDirection.Output },
+                    new SqlParameter("@Message", SqlDbType.NVarChar, 255) { Direction = ParameterDirection.Output }
+                };
+
+                _sqlHelper.RunProcedure("sp_ResetPasswordByUserId", parameters);
+
+                bool result = parameters[3].Value != DBNull.Value && (bool)parameters[3].Value;
+                string message = parameters[4].Value != DBNull.Value ? parameters[4].Value.ToString() : "Unknown error";
+
+                return (result, message);
+            }
+            catch (Exception ex)
+            {
+                return (false, "Error occurred while resetting password.");
             }
         }
 

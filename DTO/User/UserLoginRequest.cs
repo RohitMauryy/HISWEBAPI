@@ -2,9 +2,9 @@
 
 namespace HISWEBAPI.DTO.User
 {
-    public class LoginRequest
+    public class UserLoginRequest
     {
-        [Required(ErrorMessage = "Branch Name is required")]
+        [Required(ErrorMessage = "Branch Id is required")]
         public int BranchId { get; set; }
 
         [Required(ErrorMessage = "Username is required")]
@@ -23,15 +23,18 @@ namespace HISWEBAPI.DTO.User
         public string RefreshToken { get; set; } = string.Empty;
     }
 
-    public class LoginResponse
+    public class UserLoginResponse
     {
+        public int UserId { get; set; }
         public string AccessToken { get; set; } = string.Empty;
         public string RefreshToken { get; set; } = string.Empty;
         public string TokenType { get; set; } = string.Empty;
         public int ExpiresIn { get; set; }
         public string Username { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
-        public List<string> Roles { get; set; } = new();
+        public string Contact { get; set; } = string.Empty;
+        public bool IsContactVerified { get; set; }
+        public bool IsEmailVerified { get; set; }
     }
 
 }

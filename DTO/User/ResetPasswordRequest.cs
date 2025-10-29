@@ -3,13 +3,13 @@ using HISWEBAPI.Attributes;
 
 namespace HISWEBAPI.DTO.User
 {
-    public class VerifyOtpAndResetPasswordRequest
+    public class ResetPasswordRequest
     {
-        [Required(ErrorMessage = "Username is required")]
-        public string UserName { get; set; }
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
 
         [Required(ErrorMessage = "OTP is required")]
-        [RegularExpression(@"^\d{4,6}$", ErrorMessage = "OTP must be 4-6 digits")]
+        [StringLength(6, MinimumLength = 6, ErrorMessage = "OTP must be 6 digits")]
         public string Otp { get; set; }
 
         [Required(ErrorMessage = "New password is required")]
@@ -17,13 +17,8 @@ namespace HISWEBAPI.DTO.User
         public string NewPassword { get; set; }
 
         [Required(ErrorMessage = "Confirm password is required")]
+        [PasswordPolicy]
         [Compare("NewPassword", ErrorMessage = "Password and confirm password do not match")]
         public string ConfirmPassword { get; set; }
-    }
-
-    public class VerifyOtpAndResetPasswordResponse
-    {
-        public bool Result { get; set; }
-        public string Message { get; set; }
     }
 }
