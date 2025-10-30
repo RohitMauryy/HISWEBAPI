@@ -1,5 +1,5 @@
 ﻿using System.Collections.Generic;
-using HISWEBAPI.Models.Admin;
+using HISWEBAPI.Models;
 
 namespace HISWEBAPI.Repositories.Interfaces
 {

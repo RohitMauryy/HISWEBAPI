@@ -6,7 +6,7 @@ using System.Reflection;
 using log4net;
 using HISWEBAPI.Repositories.Interfaces;
 using HISWEBAPI.Exceptions;
-using HISWEBAPI.DTO.User;
+using HISWEBAPI.DTO;
 using HISWEBAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using System.ComponentModel.DataAnnotations;

@@ -49,6 +49,7 @@ public static class DependencyInjection
 
     private static void RegisterRepositories(IServiceCollection services)
     {
+        services.AddScoped<IAdminRepository, AdminRepository>();
         services.AddScoped<IHomeRepository, HomeRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
 

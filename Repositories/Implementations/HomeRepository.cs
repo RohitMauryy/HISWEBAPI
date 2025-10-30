@@ -3,7 +3,7 @@ using System.Data;
 using System.Linq;
 using HISWEBAPI.Repositories.Interfaces;
 using HISWEBAPI.Data.Helpers;
-using HISWEBAPI.Models.Admin;
+using HISWEBAPI.Models;
 
 namespace HISWEBAPI.Repositories.Implementations
 {

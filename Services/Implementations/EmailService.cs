@@ -2,20 +2,97 @@
 using MailKit.Security;
 using MimeKit;
 using HISWEBAPI.Services.Interfaces;
+using HISWEBAPI.Models;
+using HISWEBAPI.Data.Helpers;
 using log4net;
 using System.Reflection;
+using System.Data;
 
 namespace HISWEBAPI.Services.Implementations
 {
     public class EmailService : IEmailService
     {
-        private readonly IConfiguration _configuration;
+        private readonly ICustomSqlHelper _sqlHelper;
         private static readonly ILog _log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        public EmailService(IConfiguration configuration)
+        // Global variables to store mail configuration
+        private static MailServerConfiguration _mailConfig;
+        private static DateTime _lastConfigLoadTime = DateTime.MinValue;
+        private static readonly TimeSpan ConfigCacheExpiry = TimeSpan.FromMinutes(10);
+        private static readonly object _configLock = new object();
+
+        public EmailService(ICustomSqlHelper sqlHelper)
         {
-            _configuration = configuration;
+            _sqlHelper = sqlHelper;
+            LoadMailConfiguration();
         }
+
+        /// <summary>
+        /// Load mail configuration from database
+        /// </summary>
+        private void LoadMailConfiguration()
+        {
+            try
+            {
+                // Check if configuration needs to be reloaded (cache expiry)
+                if (_mailConfig != null && (DateTime.Now - _lastConfigLoadTime) < ConfigCacheExpiry)
+                {
+                    _log.Info("Using cached mail configuration");
+                    return;
+                }
+
+                lock (_configLock)
+                {
+                    // Double-check after acquiring lock
+                    if (_mailConfig != null && (DateTime.Now - _lastConfigLoadTime) < ConfigCacheExpiry)
+                    {
+                        return;
+                    }
+
+                    DataTable dt = _sqlHelper.GetDataTable(
+                        "sp_GetMailServerConfiguration",
+                        CommandType.StoredProcedure
+                    );
+
+                    if (dt != null && dt.Rows.Count > 0)
+                    {
+                        DataRow row = dt.Rows[0];
+                        _mailConfig = new MailServerConfiguration
+                        {
+                            Id = Convert.ToInt32(row["Id"]),
+                            Host = Convert.ToString(row["Host"]),
+                            Port = Convert.ToInt32(row["Port"]),
+                            UserName = Convert.ToString(row["UserName"]),
+                            Password = Convert.ToString(row["Password"]),
+                            EnableSSL = Convert.ToBoolean(row["EnableSSL"]),
+                            FromEmail = Convert.ToString(row["FromEmail"]),
+                            FromName = Convert.ToString(row["FromName"]),
+                            IsBodyHtml = Convert.ToBoolean(row["IsBodyHtml"]),
+                            Timeout = Convert.ToInt32(row["Timeout"]),
+                            IsActive = Convert.ToBoolean(row["IsActive"]),
+                            CreatedDate = Convert.ToDateTime(row["CreatedDate"]),
+                            ModifiedDate = row["ModifiedDate"] != DBNull.Value
+                                ? Convert.ToDateTime(row["ModifiedDate"])
+                                : (DateTime?)null
+                        };
+
+                        _lastConfigLoadTime = DateTime.Now;
+                        _log.Info($"Mail configuration loaded successfully from database. Host: {_mailConfig.Host}");
+                    }
+                    else
+                    {
+                        _log.Error("No active mail server configuration found in database");
+                        throw new InvalidOperationException("Mail server configuration not found");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error loading mail configuration: {ex.Message}", ex);
+                throw;
+            }
+        }
+
 
         public async Task<bool> SendEmailAsync(string toEmail, string subject, string body)
         {
@@ -23,10 +100,19 @@ namespace HISWEBAPI.Services.Implementations
 
             try
             {
+                // Ensure configuration is loaded
+                LoadMailConfiguration();
+
+                if (_mailConfig == null)
+                {
+                    _log.Error("Mail configuration is not available");
+                    return false;
+                }
+
                 var emailMessage = new MimeMessage();
                 emailMessage.From.Add(new MailboxAddress(
-                    _configuration["SMTP_EMAIL:FROM_NAME"],
-                    _configuration["SMTP_EMAIL:FROM"]
+                    _mailConfig.FromName,
+                    _mailConfig.FromEmail
                 ));
                 emailMessage.To.Add(MailboxAddress.Parse(toEmail));
                 emailMessage.Subject = subject;
@@ -39,17 +125,22 @@ namespace HISWEBAPI.Services.Implementations
 
                 using (var smtpClient = new SmtpClient())
                 {
-                    smtpClient.Timeout = 30000;
+                    smtpClient.Timeout = _mailConfig.Timeout;
+
+                    // Determine secure socket options
+                    SecureSocketOptions secureOptions = _mailConfig.EnableSSL
+                        ? SecureSocketOptions.StartTls
+                        : SecureSocketOptions.None;
 
                     await smtpClient.ConnectAsync(
-                        _configuration["SMTP_EMAIL:HOST"],
-                        int.Parse(_configuration["SMTP_EMAIL:PORT"]),
-                        SecureSocketOptions.StartTls
+                        _mailConfig.Host,
+                        _mailConfig.Port,
+                        secureOptions
                     );
 
                     await smtpClient.AuthenticateAsync(
-                        _configuration["SMTP_EMAIL:USER_NAME"],
-                        _configuration["SMTP_EMAIL:PASSWORD"]
+                        _mailConfig.UserName,
+                        _mailConfig.Password
                     );
 
                     await smtpClient.SendAsync(emailMessage);
@@ -89,7 +180,6 @@ namespace HISWEBAPI.Services.Implementations
         .info-box {{ background-color: #f8f9fa; border-left: 4px solid #667eea; padding: 15px; margin: 20px 0; border-radius: 5px; }}
         .warning-box {{ background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px; }}
         .footer {{ text-align: center; padding: 20px; font-size: 12px; color: #777; }}
-        .button {{ display: inline-block; padding: 12px 30px; background-color: #667eea; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }}
         ul {{ padding-left: 20px; }}
         li {{ margin: 8px 0; }}
     </style>

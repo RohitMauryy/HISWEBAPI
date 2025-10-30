@@ -2,7 +2,7 @@
 using System;
 using System.Reflection;
 using log4net;
-using HISWEBAPI.DTO.User;
+using HISWEBAPI.DTO;
 using HISWEBAPI.Repositories.Interfaces;
 using HISWEBAPI.Exceptions;
 using System.Text;
@@ -39,7 +39,7 @@ namespace HISWEBAPI.Controllers
         }
         [HttpPost("userLogin")]
         [AllowAnonymous]
-        public IActionResult UserLogin([FromBody] DTO.User.UserLoginRequest request)
+        public IActionResult UserLogin([FromBody] DTO.UserLoginRequest request)
         {
             _log.Info($"UserLogin called. BranchId={request.BranchId}, UserName={request.UserName}");
             try
@@ -502,6 +502,8 @@ namespace HISWEBAPI.Controllers
             }
         }
 
+        #region SMS & Email OTP Methods
+
         // ==================== SMS OTP PASSWORD RESET - 3 API FLOW ====================
 
         // API 1: Send OTP via SMS
@@ -680,7 +682,7 @@ namespace HISWEBAPI.Controllers
 
         [HttpPost("resetPasswordByUserId")]
         [AllowAnonymous]
-        public IActionResult ResetPasswordByUserId([FromBody] DTO.User.ResetPasswordRequest request)
+        public IActionResult ResetPasswordByUserId([FromBody] DTO.ResetPasswordRequest request)
         {
             _log.Info($"ResetPasswordByUserId called. UserId={request.UserId}");
 
@@ -896,7 +898,60 @@ namespace HISWEBAPI.Controllers
             }
         }
 
-      
+        // Helper methods
+        private string GenerateOtp()
+        {
+            Random random = new Random();
+            return random.Next(100000, 999999).ToString();
+        }
+
+        private string GenerateContactHint(string contact)
+        {
+            if (string.IsNullOrEmpty(contact))
+                return string.Empty;
+
+            int length = contact.Length;
+
+            if (length < 4)
+            {
+                return new string('*', length);
+            }
+
+            string first2 = contact.Substring(0, 2);
+            string last2 = contact.Substring(length - 2, 2);
+            string middle = new string('*', length - 4);
+
+            return $"{first2}{middle}{last2}";
+        }
+
+        private string GenerateEmailHint(string email)
+        {
+            if (string.IsNullOrEmpty(email))
+                return string.Empty;
+
+            var parts = email.Split('@');
+            if (parts.Length != 2)
+                return email;
+
+            string localPart = parts[0];
+            string domain = parts[1];
+
+            if (localPart.Length <= 2)
+            {
+                return $"{new string('*', localPart.Length)}@{domain}";
+            }
+
+            string first2 = localPart.Substring(0, 2);
+            string lastChar = localPart.Substring(localPart.Length - 1, 1);
+            string middle = new string('*', localPart.Length - 3);
+
+            return $"{first2}{middle}{lastChar}@{domain}";
+        }
+
+        #endregion
+
+
+
         [HttpPost("updatePassword")]
         [Authorize]
         public IActionResult UpdatePassword([FromBody] UpdatePasswordRequest model)
@@ -952,54 +1007,6 @@ namespace HISWEBAPI.Controllers
             }
         }
 
-        // Helper methods
-        private string GenerateOtp()
-        {
-            Random random = new Random();
-            return random.Next(100000, 999999).ToString();
-        }
-
-        private string GenerateContactHint(string contact)
-        {
-            if (string.IsNullOrEmpty(contact))
-                return string.Empty;
-
-            int length = contact.Length;
-
-            if (length < 4)
-            {
-                return new string('*', length);
-            }
-
-            string first2 = contact.Substring(0, 2);
-            string last2 = contact.Substring(length - 2, 2);
-            string middle = new string('*', length - 4);
-
-            return $"{first2}{middle}{last2}";
-        }
-
-        private string GenerateEmailHint(string email)
-        {
-            if (string.IsNullOrEmpty(email))
-                return string.Empty;
-
-            var parts = email.Split('@');
-            if (parts.Length != 2)
-                return email;
-
-            string localPart = parts[0];
-            string domain = parts[1];
-
-            if (localPart.Length <= 2)
-            {
-                return $"{new string('*', localPart.Length)}@{domain}";
-            }
-
-            string first2 = localPart.Substring(0, 2);
-            string lastChar = localPart.Substring(localPart.Length - 1, 1);
-            string middle = new string('*', localPart.Length - 3);
-
-            return $"{first2}{middle}{lastChar}@{domain}";
-        }
+       
     }
 }

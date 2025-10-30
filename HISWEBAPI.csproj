@@ -24,7 +24,6 @@
 
   <ItemGroup>
     <Folder Include="Data\Configurations\" />
-    <Folder Include="DTO\Admin\" />
     <Folder Include="Filters\" />
     <Folder Include="Middleware\" />
     <Folder Include="Utilities\Extensions\" />

@@ -10,6 +10,8 @@ namespace HISWEBAPI.Services.Interfaces
     public interface ISmsService
     {
         bool SendOtp(string contactNumber, string otp);
+        bool SendSms(string contactNumber, string message);
+
     }
 }
 

@@ -1,5 +1,5 @@
 ﻿using System.Data;
-using HISWEBAPI.DTO.User;
+using HISWEBAPI.DTO;
 
 public interface IUserRepository
 {

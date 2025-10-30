@@ -1,6 +1,6 @@
 ﻿using System.Data;
 using Microsoft.Data.SqlClient;
-using HISWEBAPI.DTO.User;
+using HISWEBAPI.DTO;
 using HISWEBAPI.Repositories.Interfaces;
 using HISWEBAPI.Data.Helpers;
 using HISWEBAPI.Utilities;
@@ -66,6 +66,8 @@ namespace HISWEBAPI.Repositories.Implementations
             return _sqlHelper.RunProcedureInsert("I_NewUserSignUp", parameters);
         }
 
+        #region SMS & Email OTP Methods
+
         // ==================== SMS OTP Methods ====================
 
         public (bool userExists, bool contactMatch, long userId, string registeredContact) ValidateUserForPasswordReset(string userName, string contact)
@@ -128,6 +130,35 @@ namespace HISWEBAPI.Repositories.Implementations
 
             return (result, message);
         }
+
+
+        // ==================== Common Password Reset Method ====================
+        public (bool result, string message) ResetPasswordByUserId(long userId, string otp, string hashedPassword)
+        {
+            try
+            {
+                SqlParameter[] parameters = new SqlParameter[]
+                {
+                    new SqlParameter("@UserId", userId),
+                    new SqlParameter("@otp", otp),
+                    new SqlParameter("@NewPassword", hashedPassword),
+                    new SqlParameter("@Result", SqlDbType.Bit) { Direction = ParameterDirection.Output },
+                    new SqlParameter("@Message", SqlDbType.NVarChar, 255) { Direction = ParameterDirection.Output }
+                };
+
+                _sqlHelper.RunProcedure("sp_ResetPasswordByUserId", parameters);
+
+                bool result = parameters[3].Value != DBNull.Value && (bool)parameters[3].Value;
+                string message = parameters[4].Value != DBNull.Value ? parameters[4].Value.ToString() : "Unknown error";
+
+                return (result, message);
+            }
+            catch (Exception ex)
+            {
+                return (false, "Error occurred while resetting password.");
+            }
+        }
+
 
         // ==================== EMAIL OTP Methods ====================
 
@@ -192,33 +223,8 @@ namespace HISWEBAPI.Repositories.Implementations
             return (result, message);
         }
 
-        // ==================== Common Password Reset Method ====================
+        #endregion
 
-        public (bool result, string message) ResetPasswordByUserId(long userId,string otp, string hashedPassword)
-        {
-            try
-            {
-                SqlParameter[] parameters = new SqlParameter[]
-                {
-                    new SqlParameter("@UserId", userId),
-                    new SqlParameter("@otp", otp),
-                    new SqlParameter("@NewPassword", hashedPassword),
-                    new SqlParameter("@Result", SqlDbType.Bit) { Direction = ParameterDirection.Output },
-                    new SqlParameter("@Message", SqlDbType.NVarChar, 255) { Direction = ParameterDirection.Output }
-                };
-
-                _sqlHelper.RunProcedure("sp_ResetPasswordByUserId", parameters);
-
-                bool result = parameters[3].Value != DBNull.Value && (bool)parameters[3].Value;
-                string message = parameters[4].Value != DBNull.Value ? parameters[4].Value.ToString() : "Unknown error";
-
-                return (result, message);
-            }
-            catch (Exception ex)
-            {
-                return (false, "Error occurred while resetting password.");
-            }
-        }
 
         public (bool success, string message) UpdateUserPassword(UpdatePasswordRequest model)
         {
