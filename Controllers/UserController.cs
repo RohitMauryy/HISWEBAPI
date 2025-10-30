@@ -952,7 +952,7 @@ namespace HISWEBAPI.Controllers
 
 
 
-        [HttpPost("updatePassword")]
+        [HttpPatch("updatePassword")]
         [Authorize]
         public IActionResult UpdatePassword([FromBody] UpdatePasswordRequest model)
         {

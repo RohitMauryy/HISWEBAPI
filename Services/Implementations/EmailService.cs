@@ -157,7 +157,7 @@ namespace HISWEBAPI.Services.Implementations
             }
         }
 
-        public async Task<bool> SendOtpEmail(string toEmail, string otp, string purpose = "Password Reset")
+        public async Task<bool> SendOtpEmail(string toEmail, string otp, string purpose = "Email Verification")
         {
             var subject = $"Your OTP for {purpose}";
             var body = GetOTPEmailTemplate(otp, purpose);
@@ -186,8 +186,8 @@ namespace HISWEBAPI.Services.Implementations
 </head>
 <body>
     <div class='container'>
-        <div class='header'>
-            <h1>🔐 GWS HIS</h1>
+        <div class='header'> 
+            <h1>GWS HIS</h1>
             <p style='margin: 10px 0 0 0; font-size: 16px;'>Security Verification</p>
         </div>
         <div class='content'>
