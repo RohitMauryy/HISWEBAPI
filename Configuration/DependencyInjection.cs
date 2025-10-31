@@ -3,6 +3,7 @@ using HISWEBAPI.Repositories.Implementations;
 using HISWEBAPI.Repositories.Interfaces;
 using HISWEBAPI.Services.Interfaces;
 using HISWEBAPI.Services.Implementations;
+using HISWEBAPI.Services;
 
 namespace HISWEBAPI.Configuration;
 
@@ -58,7 +59,9 @@ public static class DependencyInjection
     private static void RegisterBusinessServices(IServiceCollection services)
     {
            services.AddScoped<ISmsService, SmsService>();
-           services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<IResponseMessageService, ResponseMessageService>();
+
     }
 
     private static void RegisterCaching(IServiceCollection services, IConfiguration configuration)

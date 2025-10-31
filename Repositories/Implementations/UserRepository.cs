@@ -5,16 +5,24 @@ using HISWEBAPI.Repositories.Interfaces;
 using HISWEBAPI.Data.Helpers;
 using HISWEBAPI.Utilities;
 using HISWEBAPI.Exceptions;
+using HISWEBAPI.Services;
 
 namespace HISWEBAPI.Repositories.Implementations
 {
     public class UserRepository : IUserRepository
     {
         private readonly ICustomSqlHelper _sqlHelper;
+        private readonly IResponseMessageService _messageService;
 
-        public UserRepository(ICustomSqlHelper sqlHelper)
+        public UserRepository(ICustomSqlHelper sqlHelper, IResponseMessageService messageService)
         {
             _sqlHelper = sqlHelper;
+            _messageService = messageService;
+        }
+
+        private (string Type, string Message) GetAlert(string alertCode)
+        {
+            return _messageService.GetMessageAndTypeByAlertCode(alertCode);
         }
 
         public UserLoginResponse UserLogin(int branchId, string userName, string password)
@@ -46,6 +54,7 @@ namespace HISWEBAPI.Repositories.Implementations
 
             return null;
         }
+
         public long NewUserSignUp(UserSignupRequest request)
         {
             SqlParameter[] parameters = new SqlParameter[]
@@ -126,11 +135,10 @@ namespace HISWEBAPI.Repositories.Implementations
             _sqlHelper.RunProcedure("sp_VerifySmsOtp", parameters);
 
             int result = parameters[2].Value != DBNull.Value ? Convert.ToInt32(parameters[2].Value) : 0;
-            string message = parameters[3].Value != DBNull.Value ? parameters[3].Value.ToString() : "Unknown error";
+            string message = parameters[3].Value != DBNull.Value ? parameters[3].Value.ToString() : GetAlert("UNKNOWN_ERROR").Message;
 
             return (result, message);
         }
-
 
         // ==================== Common Password Reset Method ====================
         public (bool result, string message) ResetPasswordByUserId(long userId, string otp, string hashedPassword)
@@ -149,16 +157,15 @@ namespace HISWEBAPI.Repositories.Implementations
                 _sqlHelper.RunProcedure("sp_ResetPasswordByUserId", parameters);
 
                 bool result = parameters[3].Value != DBNull.Value && (bool)parameters[3].Value;
-                string message = parameters[4].Value != DBNull.Value ? parameters[4].Value.ToString() : "Unknown error";
+                string message = parameters[4].Value != DBNull.Value ? parameters[4].Value.ToString() : GetAlert("UNKNOWN_ERROR").Message;
 
                 return (result, message);
             }
             catch (Exception ex)
             {
-                return (false, "Error occurred while resetting password.");
+                return (false, GetAlert("PASSWORD_RESET_FAILED").Message);
             }
         }
-
 
         // ==================== EMAIL OTP Methods ====================
 
@@ -218,13 +225,12 @@ namespace HISWEBAPI.Repositories.Implementations
             _sqlHelper.RunProcedure("sp_VerifyEmailOtp", parameters);
 
             int result = parameters[2].Value != DBNull.Value ? Convert.ToInt32(parameters[2].Value) : 0;
-            string message = parameters[3].Value != DBNull.Value ? parameters[3].Value.ToString() : "Unknown error";
+            string message = parameters[3].Value != DBNull.Value ? parameters[3].Value.ToString() : GetAlert("UNKNOWN_ERROR").Message;
 
             return (result, message);
         }
 
         #endregion
-
 
         public (bool success, string message) UpdateUserPassword(UpdatePasswordRequest model)
         {
@@ -236,13 +242,13 @@ namespace HISWEBAPI.Repositories.Implementations
                 });
 
                 if (dt == null || dt.Rows.Count == 0)
-                    return (false, "User not found.");
+                    return (false, GetAlert("USER_NOT_FOUND").Message);
 
                 string storedHash = dt.Rows[0]["Password"].ToString();
 
                 bool isValid = PasswordHasher.VerifyPassword(model.CurrentPassword, storedHash);
                 if (!isValid)
-                    return (false, "Current password not matched.");
+                    return (false, GetAlert("CURRENT_PASSWORD_INCORRECT").Message);
 
                 string newHashedPassword = PasswordHasher.HashPassword(model.NewPassword);
 
@@ -253,13 +259,13 @@ namespace HISWEBAPI.Repositories.Implementations
                 });
 
                 if (result < 0)
-                    return (false, "Password update failed.");
+                    return (false, GetAlert("PASSWORD_UPDATE_FAILED").Message);
 
-                return (true, "Password updated successfully.");
+                return (true, GetAlert("PASSWORD_UPDATED").Message);
             }
             catch (Exception ex)
             {
-                return (false, "Server error occurred.");
+                return (false, GetAlert("SERVER_ERROR").Message);
             }
         }
 

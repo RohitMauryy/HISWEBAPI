@@ -7,5 +7,6 @@ namespace HISWEBAPI.Repositories.Interfaces
     {
         IEnumerable<BranchModel> GetActiveBranchList();
         IEnumerable<PickListModel> GetPickListMaster(string fieldName);
+
     }
 }

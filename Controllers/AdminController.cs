@@ -21,19 +21,26 @@ namespace HISWEBAPI.Controllers
     {
         private readonly IAdminRepository _adminRepository;
         private readonly IDistributedCache _distributedCache;
+        private readonly IResponseMessageService _messageService;
         private static readonly ILog _log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         public AdminController(
             IAdminRepository repository,
-            IDistributedCache distributedCache
+            IDistributedCache distributedCache,
+                        IResponseMessageService messageService
             )
         {
             _adminRepository = repository;
             _distributedCache = distributedCache;
+            _messageService = messageService;
+
         }
 
+        private (string Type, string Message) GetAlert(string alertCode)
+        {
+            return _messageService.GetMessageAndTypeByAlertCode(alertCode);
+        }
 
-       
 
         [HttpPost("createUpdateRoleMaster")]
         [Authorize]
@@ -45,7 +52,7 @@ namespace HISWEBAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     _log.Warn("Invalid model state for role insert/update.");
-                    return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
+                    return BadRequest(new { result = false, messageType = GetAlert("MODEL_VALIDATION_FAILED").Type, message = GetAlert("MODEL_VALIDATION_FAILED").Message, errors = ModelState });
                 }
 
                 // Get global values from claims or session
@@ -66,7 +73,7 @@ namespace HISWEBAPI.Controllers
             catch (Exception ex)
             {
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("SERVER_ERROR_FOUND").Type, message = GetAlert("SERVER_ERROR_FOUND").Message });
             }
         }
 
@@ -82,7 +89,7 @@ namespace HISWEBAPI.Controllers
                 if (roles == null || !roles.Any())
                 {
                     _log.Warn("No roles found.");
-                    return NotFound(new { result = false, message = "No roles found." });
+                    return NotFound(new { result = false, messageType = GetAlert("DATA_NOT_FOUND").Type, message = GetAlert("DATA_NOT_FOUND").Message });
                 }
 
                 _log.Info($"{roles.Count()} roles fetched successfully.");
@@ -91,7 +98,7 @@ namespace HISWEBAPI.Controllers
             catch (Exception ex)
             {
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("SERVER_ERROR_FOUND").Type, message = GetAlert("SERVER_ERROR_FOUND").Message });
             }
         }
 

@@ -8,16 +8,26 @@ using HISWEBAPI.DTO;
 using Microsoft.Data.SqlClient;
 using HISWEBAPI.Utilities;
 using HISWEBAPI.Exceptions;
+using HISWEBAPI.Services;
 
 namespace HISWEBAPI.Repositories.Implementations
 {
     public class AdminRepository : IAdminRepository
     {
         private readonly ICustomSqlHelper _sqlHelper;
+        private readonly IResponseMessageService _messageService;
 
-        public AdminRepository(ICustomSqlHelper sqlHelper)
+
+        public AdminRepository(ICustomSqlHelper sqlHelper, IResponseMessageService messageService)
         {
             _sqlHelper = sqlHelper;
+            _messageService = messageService;
+
+        }
+
+        private (string Type, string Message) GetAlert(string alertCode)
+        {
+            return _messageService.GetMessageAndTypeByAlertCode(alertCode);
         }
 
         public string CreateUpdateRoleMaster(RoleMasterRequest request, AllGlobalValues globalValues)
@@ -40,16 +50,16 @@ namespace HISWEBAPI.Repositories.Implementations
                 });
 
                 if (result < 0)
-                    return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = false, message = "Role Name Already Exists." });
+                    return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = false, messageType = GetAlert("RECORD_ALREADY_EXISTS").Type, message = GetAlert("RECORD_ALREADY_EXISTS").Message  });
 
                 if (request.RoleId == 0)
-                    return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = true, message = "Role Saved Successfully" });
+                    return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = true, messageType = GetAlert("DATA_SAVED_SUCCESSFULLY").Type, message = GetAlert("DATA_SAVED_SUCCESSFULLY").Message });
                 else
-                    return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = true, message = "Role Updated Successfully" });
+                    return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = true, messageType = GetAlert("DATA_UPDATED_SUCCESSFULLY").Type, message = GetAlert("DATA_UPDATED_SUCCESSFULLY").Message });
             }
             catch (Exception ex)
             {
-                return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = false, message = "Server Error found" });
+                return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = false, messageType = GetAlert("SERVER_ERROR_FOUND").Type, message = GetAlert("SERVER_ERROR_FOUND").Message });
             }
         }
 

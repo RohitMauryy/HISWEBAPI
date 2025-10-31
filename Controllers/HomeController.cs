@@ -17,17 +17,26 @@ namespace HISWEBAPI.Controllers
     [ApiController]
     public class HomeController : ControllerBase
     {
-        private readonly IHomeRepository _repository;
+        private readonly IHomeRepository _homeRepository;
         private readonly IDistributedCache _distributedCache;
+        private readonly IResponseMessageService _messageService;
         private static readonly ILog _log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         public HomeController(
             IHomeRepository repository,
-            IDistributedCache distributedCache
+            IDistributedCache distributedCache,
+            IResponseMessageService messageService
             )
         {
-            _repository = repository;
+            _homeRepository = repository;
             _distributedCache = distributedCache;
+            _messageService = messageService;
+
+        }
+
+        private (string Type, string Message) GetAlert(string alertCode)
+        {
+            return _messageService.GetMessageAndTypeByAlertCode(alertCode);
         }
 
         [HttpGet("getActiveBranchList")]
@@ -37,11 +46,11 @@ namespace HISWEBAPI.Controllers
             _log.Info("GetActiveBranchList called.");
             try
             {
-                var branches = _repository.GetActiveBranchList();
+                var branches = _homeRepository.GetActiveBranchList();
                 if (branches == null || !branches.Any())
                 {
                     _log.Warn("No branches found.");
-                    return NotFound(new { result = false, message = "No active branches found." });
+                    return NotFound(new { result = false, messageType = GetAlert("DATA_NOT_FOUND").Type, message = GetAlert("DATA_NOT_FOUND").Message });
                 }
                 _log.Info($"Branches fetched, Count: {branches.Count()}");
                 return Ok(new { result = true, data = branches });
@@ -49,7 +58,7 @@ namespace HISWEBAPI.Controllers
             catch (Exception ex)
             {
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("SERVER_ERROR_FOUND").Type, message = GetAlert("SERVER_ERROR_FOUND").Message });
             }
         }
 
@@ -61,11 +70,11 @@ namespace HISWEBAPI.Controllers
             _log.Info("GetPickListMaster called.");
             try
             {
-                var pickList = _repository.GetPickListMaster(fieldName);
+                var pickList = _homeRepository.GetPickListMaster(fieldName);
                 if (pickList == null || !pickList.Any())
                 {
                     _log.Warn("No PickList found.");
-                    return NotFound(new { result = false, message = "No active PickList found." });
+                    return NotFound(new { result = false, messageType = GetAlert("DATA_NOT_FOUND").Type, message = GetAlert("DATA_NOT_FOUND").Message });
                 }
                 _log.Info($"PickList fetched, Count: {pickList.Count()}");
                 return Ok(new { result = true, data = pickList });
@@ -73,12 +82,11 @@ namespace HISWEBAPI.Controllers
             catch (Exception ex)
             {
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("SERVER_ERROR_FOUND").Type, message = GetAlert("SERVER_ERROR_FOUND").Message });
             }
         }
-
+        
+       
 
     }
-
-   
 }

@@ -24,19 +24,30 @@ namespace HISWEBAPI.Controllers
         private readonly ISmsService _smsService;
         private readonly IEmailService _emailService;
         private readonly IJwtService _jwtService;
+        private readonly IResponseMessageService _messageService;
+
         private static readonly ILog _log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         public UserController(
             IUserRepository userRepository,
             ISmsService smsService,
             IJwtService jwtService,
-            IEmailService emailService)
+            IEmailService emailService,
+            IResponseMessageService messageService)
         {
             _userRepository = userRepository;
             _smsService = smsService;
             _jwtService = jwtService;
             _emailService = emailService;
+            _messageService = messageService;
         }
+
+        private (string Type, string Message) GetAlert(string alertCode)
+        {
+            return _messageService.GetMessageAndTypeByAlertCode(alertCode);
+        }
+
+
         [HttpPost("userLogin")]
         [AllowAnonymous]
         public IActionResult UserLogin([FromBody] DTO.UserLoginRequest request)
@@ -47,7 +58,7 @@ namespace HISWEBAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     _log.Warn("Invalid login request model.");
-                    return BadRequest(new { result = false, message = "Invalid request data.", errors = ModelState });
+                    return BadRequest(new { result = false, messageType = GetAlert("INVALID_REQUEST_DATA").Type, message = GetAlert("INVALID_REQUEST_DATA").Message, errors = ModelState });
                 }
 
                 // Authenticate user
@@ -72,18 +83,17 @@ namespace HISWEBAPI.Controllers
                         OperatingSystem = os,
                         Device = device,
                         DeviceType = deviceType,
-                        Location = null // Can be populated using IP geolocation service
+                        Location = null
                     };
 
                     long sessionId = _userRepository.CreateLoginSession(sessionRequest);
 
                     if (sessionId == 0)
                     {
-                        _log.Error("Failed to create login session.");
+                        _log.Error(GetAlert("SESSION_CREATE_FAILED").Message);
                     }
 
                     // Generate JWT tokens
-
                     var accessToken = _jwtService.GenerateToken(
                         loginResponse.UserId.ToString(),
                         request.UserName,
@@ -104,7 +114,7 @@ namespace HISWEBAPI.Controllers
 
                         if (!tokenSaved)
                         {
-                            _log.Error($"Failed to save refresh token for sessionId={sessionId}");
+                            _log.Error($"{GetAlert("TOKEN_SAVE_FAILED").Message} sessionId={sessionId}");
                         }
                     }
 
@@ -113,7 +123,8 @@ namespace HISWEBAPI.Controllers
                     return Ok(new
                     {
                         result = true,
-                        message = "Login successful",
+                        message = GetAlert("LOGIN_SUCCESS").Message,
+                        messageType = GetAlert("LOGIN_SUCCESS").Type,
                         data = new
                         {
                             userId = loginResponse.UserId,
@@ -142,13 +153,13 @@ namespace HISWEBAPI.Controllers
                 }
 
                 _log.Warn($"Invalid credentials for UserName={request.UserName}, BranchId={request.BranchId}");
-                return Unauthorized(new { result = false, message = "Invalid credentials." });
+                return Unauthorized(new { result = false, messageType = GetAlert("INVALID_CREDENTIALS").Type, message = GetAlert("INVALID_CREDENTIALS").Message });
             }
             catch (Exception ex)
             {
                 _log.Error($"Error during login: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("SERVER_ERROR").Type, message = GetAlert("SERVER_ERROR").Message });
             }
         }
 
@@ -162,7 +173,7 @@ namespace HISWEBAPI.Controllers
                 if (string.IsNullOrEmpty(request.AccessToken) || string.IsNullOrEmpty(request.RefreshToken))
                 {
                     _log.Warn("Invalid refresh token request.");
-                    return BadRequest(new { result = false, message = "Access token and refresh token are required." });
+                    return BadRequest(new { result = false, messageType = GetAlert("TOKEN_REQUIRED").Type, message = GetAlert("TOKEN_REQUIRED").Message });
                 }
 
                 // Validate the expired token and extract claims
@@ -170,7 +181,7 @@ namespace HISWEBAPI.Controllers
                 if (principal == null)
                 {
                     _log.Warn("Invalid access token provided for refresh.");
-                    return BadRequest(new { result = false, message = "Invalid access token." });
+                    return BadRequest(new { result = false, messageType = GetAlert("INVALID_ACCESS_TOKEN").Type, message = GetAlert("INVALID_ACCESS_TOKEN").Message });
                 }
 
                 var userId = principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -185,7 +196,7 @@ namespace HISWEBAPI.Controllers
                 if (!isValid || userIdFromToken.ToString() != userId)
                 {
                     _log.Warn($"Invalid refresh token for UserId={userId}");
-                    return Unauthorized(new { result = false, message = "Invalid or expired refresh token." });
+                    return Unauthorized(new { result = false, messageType = GetAlert("INVALID_REFRESH_TOKEN").Type, message = GetAlert("INVALID_REFRESH_TOKEN").Message });
                 }
 
                 // Generate new tokens
@@ -202,7 +213,7 @@ namespace HISWEBAPI.Controllers
 
                 if (!tokenSaved)
                 {
-                    _log.Error($"Failed to save new refresh token for sessionId={sessionId}");
+                    _log.Error($"{GetAlert("TOKEN_SAVE_FAILED").Message} sessionId={sessionId}");
                 }
 
                 _log.Info($"Token refreshed successfully for UserId={userId}");
@@ -210,7 +221,8 @@ namespace HISWEBAPI.Controllers
                 return Ok(new
                 {
                     result = true,
-                    message = "Token refreshed successfully",
+                    messageType = GetAlert("TOKEN_REFRESHED").Type,
+                    message = GetAlert("TOKEN_REFRESHED").Message,
                     data = new
                     {
                         accessToken = newAccessToken,
@@ -224,7 +236,7 @@ namespace HISWEBAPI.Controllers
             {
                 _log.Error($"Error refreshing token: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred while refreshing token." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("TOKEN_REFRESH_ERROR").Type, message = GetAlert("TOKEN_REFRESH_ERROR").Message });
             }
         }
 
@@ -252,19 +264,19 @@ namespace HISWEBAPI.Controllers
 
                     if (!sessionUpdated || !tokenInvalidated)
                     {
-                        _log.Warn($"Failed to complete logout for SessionId={request.SessionId}");
+                        _log.Warn($"{GetAlert("LOGOUT_FAILED")} SessionId={request.SessionId}");
                     }
                 }
 
                 _log.Info($"User logged out successfully. UserId={userId}, UserName={username}");
 
-                return Ok(new { result = true, message = "Logged out successfully." });
+                return Ok(new { result = true, messageType = GetAlert("LOGOUT_SUCCESS").Type, message = GetAlert("LOGOUT_SUCCESS").Message });
             }
             catch (Exception ex)
             {
                 _log.Error($"Error during logout: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred during logout." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("LOGOUT_ERROR").Type, message = GetAlert("LOGOUT_ERROR").Message });
             }
         }
 
@@ -279,7 +291,7 @@ namespace HISWEBAPI.Controllers
 
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized(new { result = false, message = "Invalid user." });
+                    return Unauthorized(new { result = false, messageType = GetAlert("INVALID_USER").Type, message = GetAlert("INVALID_USER").Message });
                 }
 
                 bool result = _userRepository.InvalidateAllUserSessions(long.Parse(userId));
@@ -287,16 +299,16 @@ namespace HISWEBAPI.Controllers
                 if (result)
                 {
                     _log.Info($"All sessions logged out for UserId={userId}");
-                    return Ok(new { result = true, message = "All sessions logged out successfully." });
+                    return Ok(new { result = true, messageType = GetAlert("ALL_SESSIONS_LOGGED_OUT").Type, message = GetAlert("ALL_SESSIONS_LOGGED_OUT").Message });
                 }
 
-                return StatusCode(500, new { result = false, message = "Failed to logout all sessions." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("LOGOUT_ALL_SESSIONS_FAILED").Type, message = GetAlert("LOGOUT_ALL_SESSIONS_FAILED").Message });
             }
             catch (Exception ex)
             {
                 _log.Error($"Error during logoutAllSessions: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("SERVER_ERROR").Type, message = GetAlert("SERVER_ERROR").Message });
             }
         }
 
@@ -311,14 +323,14 @@ namespace HISWEBAPI.Controllers
 
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized(new { result = false, message = "Invalid user." });
+                    return Unauthorized(new { result = false, messageType = GetAlert("INVALID_USER").Type, message = GetAlert("INVALID_USER").Message });
                 }
 
                 DataTable dt = _userRepository.GetUserLoginHistory(long.Parse(userId), pageNumber, pageSize);
 
                 if (dt == null || dt.Rows.Count == 0)
                 {
-                    return Ok(new { result = true, message = "No login history found.", data = new List<LoginHistoryResponse>() });
+                    return Ok(new { result = true, messageType = GetAlert("NO_LOGIN_HISTORY").Type, message = GetAlert("NO_LOGIN_HISTORY").Message, data = new List<LoginHistoryResponse>() });
                 }
 
                 var history = dt.AsEnumerable().Select(row => new LoginHistoryResponse
@@ -336,13 +348,13 @@ namespace HISWEBAPI.Controllers
                 }).ToList();
 
                 _log.Info($"Login history retrieved for UserId={userId}");
-                return Ok(new { result = true, data = history });
+                return Ok(new { result = true, messageType = GetAlert("LOGIN_HISTORY_RETRIEVED").Type, message = GetAlert("LOGIN_HISTORY_RETRIEVED").Message, data = history });
             }
             catch (Exception ex)
             {
                 _log.Error($"Error retrieving login history: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("LOGIN_HISTORY_ERROR").Type, message = GetAlert("LOGIN_HISTORY_ERROR").Message });
             }
         }
 
@@ -357,14 +369,14 @@ namespace HISWEBAPI.Controllers
 
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized(new { result = false, message = "Invalid user." });
+                    return Unauthorized(new { result = false, messageType = GetAlert("INVALID_USER").Type, message = GetAlert("INVALID_USER").Message });
                 }
 
                 DataTable dt = _userRepository.GetActiveUserSessions(long.Parse(userId));
 
                 if (dt == null || dt.Rows.Count == 0)
                 {
-                    return Ok(new { result = true, message = "No active sessions found.", data = new List<ActiveSessionResponse>() });
+                    return Ok(new { result = true, messageType = GetAlert("NO_ACTIVE_SESSIONS").Type, message = GetAlert("NO_ACTIVE_SESSIONS").Message, data = new List<ActiveSessionResponse>() });
                 }
 
                 var sessions = dt.AsEnumerable().Select(row => new ActiveSessionResponse
@@ -376,17 +388,17 @@ namespace HISWEBAPI.Controllers
                     Browser = row["Browser"]?.ToString(),
                     OperatingSystem = row["OperatingSystem"]?.ToString(),
                     Device = row["Device"]?.ToString(),
-                    IsCurrentSession = false // You can compare with current session if needed
+                    IsCurrentSession = false
                 }).ToList();
 
                 _log.Info($"Active sessions retrieved for UserId={userId}");
-                return Ok(new { result = true, data = sessions });
+                return Ok(new { result = true, messageType = GetAlert("ACTIVE_SESSIONS_RETRIEVED").Type, message = GetAlert("ACTIVE_SESSIONS_RETRIEVED").Message, data = sessions });
             }
             catch (Exception ex)
             {
                 _log.Error($"Error retrieving active sessions: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("ACTIVE_SESSIONS_ERROR").Type, message = GetAlert("ACTIVE_SESSIONS_ERROR").Message });
             }
         }
 
@@ -401,7 +413,7 @@ namespace HISWEBAPI.Controllers
 
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized(new { result = false, message = "Invalid user." });
+                    return Unauthorized(new { result = false, messageType = GetAlert("INVALID_USER").Type, message = GetAlert("INVALID_USER").Message });
                 }
 
                 // Update session status
@@ -417,32 +429,29 @@ namespace HISWEBAPI.Controllers
                 if (sessionUpdated && tokenInvalidated)
                 {
                     _log.Info($"Session terminated successfully. SessionId={request.SessionId}");
-                    return Ok(new { result = true, message = "Session terminated successfully." });
+                    return Ok(new { result = true, messageType = GetAlert("SESSION_TERMINATED").Type, message = GetAlert("SESSION_TERMINATED").Message });
                 }
 
-                return StatusCode(500, new { result = false, message = "Failed to terminate session." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("SESSION_TERMINATE_FAILED").Type, message = GetAlert("SESSION_TERMINATE_FAILED").Message });
             }
             catch (Exception ex)
             {
                 _log.Error($"Error terminating session: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("SESSION_TERMINATE_ERROR").Type, message = GetAlert("SESSION_TERMINATE_ERROR").Message });
             }
         }
 
-        // Helper method to get client IP address
         private string GetClientIpAddress()
         {
             try
             {
                 var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
 
-                // Check for X-Forwarded-For header (for proxies/load balancers)
                 if (Request.Headers.ContainsKey("X-Forwarded-For"))
                 {
                     ipAddress = Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',').FirstOrDefault()?.Trim();
                 }
-                // Check for X-Real-IP header
                 else if (Request.Headers.ContainsKey("X-Real-IP"))
                 {
                     ipAddress = Request.Headers["X-Real-IP"].FirstOrDefault();
@@ -466,7 +475,7 @@ namespace HISWEBAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     _log.Warn("Invalid model state for user insert.");
-                    return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
+                    return BadRequest(new { result = false, messageType = GetAlert("INVALID_SIGNUP_DATA").Type, message = GetAlert("INVALID_SIGNUP_DATA").Message, errors = ModelState });
                 }
 
                 var result = _userRepository.NewUserSignUp(request);
@@ -474,39 +483,34 @@ namespace HISWEBAPI.Controllers
                 if (result == -1)
                 {
                     _log.Warn($"Duplicate username attempted: {request.UserName}");
-                    return Conflict(new { result = false, message = "Username already exists. Please choose a different username." });
+                    return Conflict(new { result = false, messageType = GetAlert("USERNAME_EXISTS").Type, message = GetAlert("USERNAME_EXISTS").Message });
                 }
 
                 if (result == -2)
                 {
                     _log.Warn("License validation failed for user insert.");
-                    return BadRequest(new { result = false, message = "License limit reached. Cannot add more users." });
+                    return BadRequest(new { result = false, messageType = GetAlert("LICENSE_LIMIT_REACHED").Type, message = GetAlert("LICENSE_LIMIT_REACHED").Message });
                 }
 
                 if (result > 0)
                 {
                     _log.Info($"User inserted successfully. UserId={result}");
-                    string message = "User created successfully.";
-
-                    return Ok(new { result = true, userId = result, message });
+                    return Ok(new { result = true, userId = result, messageType = GetAlert("USER_CREATED").Type, message = GetAlert("USER_CREATED").Message });
                 }
 
                 _log.Error("Failed to insert/update user. Result=0");
-                return StatusCode(500, new { result = false, message = "Failed to save user." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("USER_SAVE_FAILED").Type, message = GetAlert("USER_SAVE_FAILED").Message });
             }
             catch (Exception ex)
             {
                 _log.Error($"Error in NewUserSignUp: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("SIGNUP_ERROR").Type, message = GetAlert("SIGNUP_ERROR").Message });
             }
         }
 
         #region SMS & Email OTP Methods
 
-        // ==================== SMS OTP PASSWORD RESET - 3 API FLOW ====================
-
-        // API 1: Send OTP via SMS
         [HttpPost("sendSmsOtp")]
         [AllowAnonymous]
         public IActionResult SendSmsOtp([FromBody] SendSmsOtpRequest request)
@@ -518,7 +522,7 @@ namespace HISWEBAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     _log.Warn("Invalid model state for send SMS OTP.");
-                    return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
+                    return BadRequest(new { result = false, messageType = GetAlert("INVALID_SMS_OTP_DATA").Type, message = GetAlert("INVALID_SMS_OTP_DATA").Message, errors = ModelState });
                 }
 
                 var (userExists, contactMatch, userId, registeredContact) = _userRepository.ValidateUserForPasswordReset(
@@ -532,7 +536,8 @@ namespace HISWEBAPI.Controllers
                     return NotFound(new
                     {
                         result = false,
-                        message = "Username does not exist. Please check and try again."
+                        messageType = GetAlert("USERNAME_NOT_FOUND").Type,
+                        message = GetAlert("USERNAME_NOT_FOUND").Message
                     });
                 }
 
@@ -544,7 +549,8 @@ namespace HISWEBAPI.Controllers
                     return BadRequest(new
                     {
                         result = false,
-                        message = "Contact number does not match. Please check the registered contact hint.",
+                        messageType = GetAlert("CONTACT_NOT_MATCH").Type,
+                        message = GetAlert("CONTACT_NOT_MATCH").Message,
                         contactHint = contactHint
                     });
                 }
@@ -555,18 +561,18 @@ namespace HISWEBAPI.Controllers
                 if (!otpStored)
                 {
                     _log.Error($"Failed to store OTP for user: {request.UserName}");
-                    return StatusCode(500, new { result = false, message = "Failed to generate OTP. Please try again." });
+                    return StatusCode(500, new { result = false, messageType = GetAlert("OTP_GENERATION_FAILED").Type, message = GetAlert("OTP_GENERATION_FAILED").Message });
                 }
 
                 bool smsSent = _smsService.SendOtp(registeredContact, otp);
 
                 if (!smsSent)
                 {
-                    _log.Error($"Failed to send SMS to: {registeredContact}");
+                    _log.Error($"{GetAlert("SMS_SEND_FAILED").Message} to: {registeredContact}");
                     _log.Warn($"OTP stored but SMS failed for user: {request.UserName}");
                 }
 
-                _log.Info($"OTP generated for user {request.UserName}: {otp}");
+                _log.Info($"OTP generated for user {request.UserName}");
 
                 string contactHintSuccess = GenerateContactHint(registeredContact);
 
@@ -575,7 +581,8 @@ namespace HISWEBAPI.Controllers
                 return Ok(new
                 {
                     result = true,
-                    message = $"OTP sent successfully to {contactHintSuccess}",
+                    messageType = GetAlert("OTP_SENT_SMS").Type,
+                    message = $"{GetAlert("OTP_SENT_SMS").Message} to {contactHintSuccess}",
                     userId = userId,
                     contactHint = contactHintSuccess
                 });
@@ -584,11 +591,10 @@ namespace HISWEBAPI.Controllers
             {
                 _log.Error($"Error in sendSmsOtp: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("SMS_OTP_ERROR").Type, message = GetAlert("SMS_OTP_ERROR").Message });
             }
         }
 
-        // API 2: Verify SMS OTP
         [HttpPost("verifySmsOtp")]
         [AllowAnonymous]
         public IActionResult VerifySmsOtp([FromBody] VerifySmsOtpRequest request)
@@ -600,7 +606,7 @@ namespace HISWEBAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     _log.Warn("Invalid model state for verify SMS OTP.");
-                    return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
+                    return BadRequest(new { result = false, messageType = GetAlert("INVALID_VERIFY_OTP_DATA").Type, message = GetAlert("INVALID_VERIFY_OTP_DATA").Message, errors = ModelState });
                 }
 
                 var (result, message) = _userRepository.VerifySmsOtp(request.UserId, request.Otp);
@@ -612,7 +618,8 @@ namespace HISWEBAPI.Controllers
                         return Ok(new
                         {
                             result = true,
-                            message = message,
+                            messageType = GetAlert("OTP_VERIFIED").Type,
+                            message = GetAlert("OTP_VERIFIED").Message,
                             userId = request.UserId,
                             otp = request.Otp
                         });
@@ -622,7 +629,8 @@ namespace HISWEBAPI.Controllers
                         return NotFound(new
                         {
                             result = false,
-                            message = message,
+                            messageType = GetAlert("USER_NOT_FOUND_OTP").Type,
+                            message = GetAlert("USER_NOT_FOUND_OTP").Message,
                             userId = request.UserId,
                             otp = request.Otp
                         });
@@ -632,7 +640,8 @@ namespace HISWEBAPI.Controllers
                         return BadRequest(new
                         {
                             result = false,
-                            message = message,
+                            messageType = GetAlert("USER_INACTIVE").Type,
+                            message = GetAlert("USER_INACTIVE").Message,
                             userId = request.UserId,
                             otp = request.Otp
                         });
@@ -644,7 +653,8 @@ namespace HISWEBAPI.Controllers
                         return BadRequest(new
                         {
                             result = false,
-                            message = message,
+                            messageType = GetAlert("OTP_VALIDATION_FAILED").Type,
+                            message = GetAlert("OTP_VALIDATION_FAILED").Message,
                             userId = request.UserId,
                             otp = request.Otp
                         });
@@ -654,7 +664,8 @@ namespace HISWEBAPI.Controllers
                         return BadRequest(new
                         {
                             result = false,
-                            message = message,
+                            messageType = GetAlert("INVALID_OTP").Type,
+                            message = GetAlert("INVALID_OTP").Message,
                             userId = request.UserId,
                             otp = request.Otp
                         });
@@ -664,7 +675,8 @@ namespace HISWEBAPI.Controllers
                         return StatusCode(500, new
                         {
                             result = false,
-                            message = message,
+                            messageType = GetAlert("OTP_VERIFICATION_ERROR").Type,
+                            message = GetAlert("OTP_VERIFICATION_ERROR").Message,
                             userId = request.UserId,
                             otp = request.Otp
                         });
@@ -674,11 +686,9 @@ namespace HISWEBAPI.Controllers
             {
                 _log.Error($"Error in verifySmsOtp: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("VERIFY_OTP_ERROR").Type, message = GetAlert("VERIFY_OTP_ERROR").Message });
             }
         }
-
-        // API 3: Reset Password 
 
         [HttpPost("resetPasswordByUserId")]
         [AllowAnonymous]
@@ -691,7 +701,7 @@ namespace HISWEBAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     _log.Warn("Invalid model state for reset password.");
-                    return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
+                    return BadRequest(new { result = false, messageType = GetAlert("INVALID_RESET_PASSWORD_DATA").Type, message = GetAlert("INVALID_RESET_PASSWORD_DATA").Message, errors = ModelState });
                 }
 
                 if (request.NewPassword != request.ConfirmPassword)
@@ -700,13 +710,14 @@ namespace HISWEBAPI.Controllers
                     return BadRequest(new
                     {
                         result = false,
-                        message = "New password and confirm password do not match."
+                        messageType = GetAlert("PASSWORD_MISMATCH").Type,
+                        message = GetAlert("PASSWORD_MISMATCH").Message
                     });
                 }
 
                 string hashedPassword = PasswordHasher.HashPassword(request.NewPassword);
 
-                var (result, message) = _userRepository.ResetPasswordByUserId(request.UserId,request.Otp, hashedPassword);
+                var (result, message) = _userRepository.ResetPasswordByUserId(request.UserId, request.Otp, hashedPassword);
 
                 if (result)
                 {
@@ -714,7 +725,8 @@ namespace HISWEBAPI.Controllers
                     return Ok(new
                     {
                         result = true,
-                        message = message
+                        messageType = GetAlert("PASSWORD_RESET_SUCCESS").Type,
+                        message = GetAlert("PASSWORD_RESET_SUCCESS").Message
                     });
                 }
                 else
@@ -723,7 +735,8 @@ namespace HISWEBAPI.Controllers
                     return BadRequest(new
                     {
                         result = false,
-                        message = message
+                        messageType = GetAlert("PASSWORD_RESET_FAILED").Type,
+                        message = GetAlert("PASSWORD_RESET_FAILED").Message
                     });
                 }
             }
@@ -731,14 +744,10 @@ namespace HISWEBAPI.Controllers
             {
                 _log.Error($"Error in ResetPasswordByUserId: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("RESET_PASSWORD_ERROR").Type, message = GetAlert("RESET_PASSWORD_ERROR").Message });
             }
         }
 
-
-        // ==================== EMAIL Verify by OTP  - 2 API FLOW ====================
-
-        // API 1: Send OTP via Email
         [HttpPost("sendEmailOtp")]
         [AllowAnonymous]
         public async Task<IActionResult> SendEmailOtp([FromBody] SendEmailOtpRequest request)
@@ -750,7 +759,7 @@ namespace HISWEBAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     _log.Warn("Invalid model state for send email OTP.");
-                    return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
+                    return BadRequest(new { result = false, messageType = GetAlert("INVALID_EMAIL_OTP_DATA").Type, message = GetAlert("INVALID_EMAIL_OTP_DATA").Message, errors = ModelState });
                 }
 
                 var (userExists, emailMatch, userId, registeredEmail) = _userRepository.ValidateUserForEmailPasswordReset(
@@ -764,7 +773,8 @@ namespace HISWEBAPI.Controllers
                     return NotFound(new
                     {
                         result = false,
-                        message = "Username does not exist. Please check and try again."
+                        messageType = GetAlert("USERNAME_NOT_FOUND").Type,
+                        message = GetAlert("USERNAME_NOT_FOUND").Message
                     });
                 }
 
@@ -776,7 +786,8 @@ namespace HISWEBAPI.Controllers
                     return BadRequest(new
                     {
                         result = false,
-                        message = "Email address does not match. Please check the registered email hint.",
+                        messageType = GetAlert("EMAIL_NOT_MATCH").Type,
+                        message = GetAlert("EMAIL_NOT_MATCH").Message,
                         emailHint = emailHint
                     });
                 }
@@ -787,7 +798,7 @@ namespace HISWEBAPI.Controllers
                 if (!otpStored)
                 {
                     _log.Error($"Failed to store OTP for user: {request.UserName}");
-                    return StatusCode(500, new { result = false, message = "Failed to generate OTP. Please try again." });
+                    return StatusCode(500, new { result = false, messageType = GetAlert("OTP_GENERATION_FAILED").Type, message = GetAlert("OTP_GENERATION_FAILED").Message });
                 }
 
                 bool emailSent = await _emailService.SendOtpEmail(registeredEmail, otp, "Password Reset");
@@ -795,7 +806,7 @@ namespace HISWEBAPI.Controllers
                 if (!emailSent)
                 {
                     _log.Error($"Failed to send email to: {registeredEmail}");
-                    return StatusCode(500, new { result = false, message = "Failed to send OTP email. Please try again." });
+                    return StatusCode(500, new { result = false, messageType = GetAlert("EMAIL_SEND_FAILED").Type, message = GetAlert("EMAIL_SEND_FAILED").Message });
                 }
 
                 _log.Info($"OTP generated and sent via email for user {request.UserName}: {otp}");
@@ -807,7 +818,8 @@ namespace HISWEBAPI.Controllers
                 return Ok(new
                 {
                     result = true,
-                    message = $"OTP sent successfully to {emailHintSuccess}",
+                    messageType = GetAlert("OTP_SENT_EMAIL").Type,
+                    message = $"{GetAlert("OTP_SENT_EMAIL").Message} to {emailHintSuccess}",
                     userId = userId,
                     emailHint = emailHintSuccess
                 });
@@ -816,11 +828,10 @@ namespace HISWEBAPI.Controllers
             {
                 _log.Error($"Error in sendEmailOtp: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("EMAIL_OTP_ERROR").Type, message = GetAlert("EMAIL_OTP_ERROR").Message });
             }
         }
 
-        // API 2: Verify Email OTP
         [HttpPost("verifyEmailOtp")]
         [AllowAnonymous]
         public IActionResult VerifyEmailOtp([FromBody] VerifyEmailOtpRequest request)
@@ -832,7 +843,7 @@ namespace HISWEBAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     _log.Warn("Invalid model state for verify email OTP.");
-                    return BadRequest(new { result = false, message = "Invalid input data.", errors = ModelState });
+                    return BadRequest(new { result = false, messageType = GetAlert("INVALID_VERIFY_OTP_DATA").Type, message = GetAlert("INVALID_VERIFY_OTP_DATA").Message, errors = ModelState });
                 }
 
                 var (result, message) = _userRepository.VerifyEmailOtp(request.UserId, request.Otp);
@@ -844,7 +855,8 @@ namespace HISWEBAPI.Controllers
                         return Ok(new
                         {
                             result = true,
-                            message = message
+                            messageType = GetAlert("EMAIL_OTP_VERIFIED").Type,
+                            message = GetAlert("EMAIL_OTP_VERIFIED").Message
                         });
 
                     case -1:
@@ -852,7 +864,8 @@ namespace HISWEBAPI.Controllers
                         return NotFound(new
                         {
                             result = false,
-                            message = message
+                            messageType = GetAlert("USER_NOT_FOUND_OTP").Type,
+                            message = GetAlert("USER_NOT_FOUND_OTP").Message
                         });
 
                     case -2:
@@ -860,7 +873,8 @@ namespace HISWEBAPI.Controllers
                         return BadRequest(new
                         {
                             result = false,
-                            message = message
+                            messageType = GetAlert("USER_INACTIVE").Type,
+                            message = GetAlert("USER_INACTIVE").Message
                         });
 
                     case -3:
@@ -870,7 +884,8 @@ namespace HISWEBAPI.Controllers
                         return BadRequest(new
                         {
                             result = false,
-                            message = message
+                            messageType = GetAlert("EMAIL_OTP_VALIDATION_FAILED").Type,
+                            message = GetAlert("EMAIL_OTP_VALIDATION_FAILED").Message
                         });
 
                     case -6:
@@ -878,7 +893,8 @@ namespace HISWEBAPI.Controllers
                         return BadRequest(new
                         {
                             result = false,
-                            message = message
+                            messageType = GetAlert("INVALID_EMAIL_OTP").Type,
+                            message = GetAlert("INVALID_EMAIL_OTP").Message
                         });
 
                     default:
@@ -886,7 +902,8 @@ namespace HISWEBAPI.Controllers
                         return StatusCode(500, new
                         {
                             result = false,
-                            message = message
+                            messageType = GetAlert("EMAIL_OTP_VERIFICATION_ERROR").Type,
+                            message = GetAlert("EMAIL_OTP_VERIFICATION_ERROR").Message
                         });
                 }
             }
@@ -894,11 +911,10 @@ namespace HISWEBAPI.Controllers
             {
                 _log.Error($"Error in verifyEmailOtp: {ex.Message}", ex);
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("VERIFY_EMAIL_OTP_ERROR").Type, message = GetAlert("VERIFY_EMAIL_OTP_ERROR").Message });
             }
         }
 
-        // Helper methods
         private string GenerateOtp()
         {
             Random random = new Random();
@@ -950,8 +966,6 @@ namespace HISWEBAPI.Controllers
 
         #endregion
 
-
-
         [HttpPatch("updatePassword")]
         [Authorize]
         public IActionResult UpdatePassword([FromBody] UpdatePasswordRequest model)
@@ -964,16 +978,16 @@ namespace HISWEBAPI.Controllers
                 if (!result)
                 {
                     _log.Warn($"{message} UserId={model.UserId}");
-                    return BadRequest(new { result = false, message });
+                    return BadRequest(new { result = false, messageType = "Error", message });
                 }
 
                 _log.Info($"Password Updated successfully for UserId={model.UserId}");
-                return Ok(new { result = true, message });
+                return Ok(new { result = true, messageType="Info", message });
             }
             catch (Exception ex)
             {
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("UPDATE_PASSWORD_ERROR").Type, message = GetAlert("UPDATE_PASSWORD_ERROR").Message });
             }
         }
 
@@ -989,7 +1003,7 @@ namespace HISWEBAPI.Controllers
                 if (dt == null || dt.Rows.Count == 0)
                 {
                     _log.Warn($"No roles found for this user. UserId={request.UserId}");
-                    return NotFound(new { result = false, message = "No roles found for this user." });
+                    return NotFound(new { result = false, messageType = GetAlert("NO_ROLES_FOUND").Type, message = GetAlert("NO_ROLES_FOUND").Message });
                 }
 
                 var roles = dt.AsEnumerable().Select(row => new
@@ -997,16 +1011,15 @@ namespace HISWEBAPI.Controllers
                     RoleId = row["RoleId"],
                     RoleName = row["RoleName"]
                 });
+
                 _log.Info($"GetUserRoles successfully for UserId={request.UserId}");
-                return Ok(new { result = true, roles });
+                return Ok(new { result = true, messageType = GetAlert("ROLES_RETRIEVED").Type, message = GetAlert("ROLES_RETRIEVED").Message, roles });
             }
             catch (Exception ex)
             {
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, message = "Server error occurred." });
+                return StatusCode(500, new { result = false, messageType = GetAlert("GET_ROLES_ERROR").Type, message = GetAlert("GET_ROLES_ERROR").Message });
             }
         }
-
-       
     }
 }

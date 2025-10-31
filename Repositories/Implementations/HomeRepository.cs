@@ -30,22 +30,23 @@ namespace HISWEBAPI.Repositories.Implementations
             }).ToList() ?? new List<BranchModel>();
         }
 
-      public IEnumerable<PickListModel> GetPickListMaster(string fieldName)
-{
-    var dataTable = _sqlHelper.GetDataTable(
-        "S_GetPickListMaster",
-        CommandType.StoredProcedure,
-        new { fieldName = fieldName }  // Remove @ symbol
-    );
+        public IEnumerable<PickListModel> GetPickListMaster(string fieldName)
+        {
+            var dataTable = _sqlHelper.GetDataTable(
+                "S_GetPickListMaster",
+                CommandType.StoredProcedure,
+                new { fieldName = fieldName }  // Remove @ symbol
+            );
 
-    return dataTable?.AsEnumerable().Select(row => new PickListModel
-    {
-        id = row.Field<int>("Id"),
-        fieldName = row.Field<string>("FieldName"),
-        value = row.Field<string>("Value"),
-        key = row.Field<string>("Key")
-    }).ToList() ?? new List<PickListModel>();
-}
+            return dataTable?.AsEnumerable().Select(row => new PickListModel
+            {
+                id = row.Field<int>("Id"),
+                fieldName = row.Field<string>("FieldName"),
+                value = row.Field<string>("Value"),
+                key = row.Field<string>("Key")
+            }).ToList() ?? new List<PickListModel>();
+        }
+
 
 
     }
