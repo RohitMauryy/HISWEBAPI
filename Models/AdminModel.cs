@@ -12,6 +12,15 @@
         public required string branchName { get; set; }
     }
 
+ public class PickListModel
+    {
+        public required int id { get; set; }
+        public required string fieldName { get; set; }
+        public required string value { get; set; }
+        public required string key { get; set; }
+    }
+
+
     public class RoleMasterModel
     {
         public int RoleId { get; set; }

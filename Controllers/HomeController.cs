@@ -54,6 +54,30 @@ namespace HISWEBAPI.Controllers
         }
 
 
+        [HttpGet("getPickListMaster")]
+        [AllowAnonymous]
+        public IActionResult GetPickListMaster(string fieldName)
+        {
+            _log.Info("GetPickListMaster called.");
+            try
+            {
+                var pickList = _repository.GetPickListMaster(fieldName);
+                if (pickList == null || !pickList.Any())
+                {
+                    _log.Warn("No PickList found.");
+                    return NotFound(new { result = false, message = "No active PickList found." });
+                }
+                _log.Info($"PickList fetched, Count: {pickList.Count()}");
+                return Ok(new { result = true, data = pickList });
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                return StatusCode(500, new { result = false, message = "Server error occurred." });
+            }
+        }
+
+
     }
 
    
