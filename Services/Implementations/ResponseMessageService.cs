@@ -7,6 +7,8 @@ using HISWEBAPI.Data.Helpers;
 using HISWEBAPI.Models;
 using HISWEBAPI.DTO;
 using Microsoft.Extensions.Caching.Distributed;
+using HISWEBAPI.Exceptions;
+using System.Reflection;
 
 namespace HISWEBAPI.Services
 {
@@ -85,8 +87,9 @@ namespace HISWEBAPI.Services
 
                 return ("Error", "Response message not found.");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
                 return ("Error", "Something went wrong while retrieving response message.");
             }
         }
@@ -122,6 +125,7 @@ namespace HISWEBAPI.Services
             }
             catch (Exception ex)
             {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
                 return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = false, messageType = "Error", message = "SERVER_ERROR_FOUND" });
             }
         }

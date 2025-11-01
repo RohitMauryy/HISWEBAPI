@@ -10,7 +10,7 @@ namespace HISWEBAPI.Services
 {
     public interface IJwtService
     {
-        string GenerateToken(string userId, string username, string email, List<string>? roles = null);
+        string GenerateToken(string userId, string username);
         string GenerateRefreshToken();
         ClaimsPrincipal? GetPrincipalFromExpiredToken(string token);
     }

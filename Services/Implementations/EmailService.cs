@@ -7,6 +7,7 @@ using HISWEBAPI.Data.Helpers;
 using log4net;
 using System.Reflection;
 using System.Data;
+using System.Security.Cryptography.X509Certificates;
 
 namespace HISWEBAPI.Services.Implementations
 {
@@ -125,6 +126,37 @@ namespace HISWEBAPI.Services.Implementations
 
                 using (var smtpClient = new SmtpClient())
                 {
+                    // Add secure certificate validation callback
+                    smtpClient.ServerCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) =>
+                    {
+                        // If no errors, certificate is valid
+                        if (sslPolicyErrors == System.Net.Security.SslPolicyErrors.None)
+                        {
+                            _log.Info("SSL certificate validation passed without errors");
+                            return true;
+                        }
+
+                        // Check chain status for specific errors
+                        if (chain != null && chain.ChainStatus != null)
+                        {
+                            foreach (var status in chain.ChainStatus)
+                            {
+                                // Only allow revocation-related errors to be bypassed
+                                if (status.Status != X509ChainStatusFlags.RevocationStatusUnknown &&
+                                    status.Status != X509ChainStatusFlags.OfflineRevocation &&
+                                    status.Status != X509ChainStatusFlags.NoError)
+                                {
+                                    _log.Error($"Certificate validation failed: {status.Status} - {status.StatusInformation}");
+                                    return false;
+                                }
+                            }
+                        }
+
+                        // Log warning but accept certificate with revocation check bypass
+                        _log.Warn($"Certificate accepted with revocation check bypass. SSL Policy Errors: {sslPolicyErrors}");
+                        return true;
+                    };
+
                     smtpClient.Timeout = _mailConfig.Timeout;
 
                     // Determine secure socket options

@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Caching.Distributed;
 using System;
 using System.Linq;
 using System.Reflection;
@@ -8,10 +7,8 @@ using HISWEBAPI.Repositories.Interfaces;
 using HISWEBAPI.Exceptions;
 using HISWEBAPI.DTO;
 using HISWEBAPI.Services;
-using Microsoft.AspNetCore.Authorization;
-using System.ComponentModel.DataAnnotations;
 using HISWEBAPI.Models;
-using HISWEBAPI.Repositories.Implementations;
+using Microsoft.AspNetCore.Authorization;
 
 namespace HISWEBAPI.Controllers
 {
@@ -20,32 +17,19 @@ namespace HISWEBAPI.Controllers
     public class HomeController : ControllerBase
     {
         private readonly IHomeRepository _homeRepository;
-        private readonly IDistributedCache _distributedCache;
         private readonly IResponseMessageService _messageService;
         private static readonly ILog _log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         public HomeController(
             IHomeRepository repository,
-            IDistributedCache distributedCache,
-            IResponseMessageService messageService
-            )
+            IResponseMessageService messageService)
         {
             _homeRepository = repository;
-            _distributedCache = distributedCache;
             _messageService = messageService;
-
         }
 
-        private (string Type, string Message) GetAlert(string alertCode)
-        {
-            return _messageService.GetMessageAndTypeByAlertCode(alertCode);
-        }
-
-
-        // Helper method to extract global values from the authenticated user context
         private AllGlobalValues GetGlobalValues()
         {
-            // Extract from JWT claims or session
             var hospIdClaim = User.Claims.FirstOrDefault(c => c.Type == "hospId")?.Value;
             var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "userId")?.Value;
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
@@ -58,67 +42,72 @@ namespace HISWEBAPI.Controllers
             };
         }
 
+      
         [HttpGet("getActiveBranchList")]
         [AllowAnonymous]
         public IActionResult GetActiveBranchList()
         {
             _log.Info("GetActiveBranchList called.");
-            try
-            {
-                var branches = _homeRepository.GetActiveBranchList();
-                if (branches == null || !branches.Any())
+           
+                var serviceResult = _homeRepository.GetActiveBranchList();
+
+                if (serviceResult.Result)
+                    _log.Info($"Branches fetched: {serviceResult.Message}");
+                else
+                    _log.Warn($"No branches found: {serviceResult.Message}");
+
+                return StatusCode(serviceResult.StatusCode, new
                 {
-                    _log.Warn("No branches found.");
-                    return NotFound(new { result = false, messageType = GetAlert("DATA_NOT_FOUND").Type, message = GetAlert("DATA_NOT_FOUND").Message });
-                }
-                _log.Info($"Branches fetched, Count: {branches.Count()}");
-                return Ok(new { result = true, data = branches });
-            }
-            catch (Exception ex)
-            {
-                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, messageType = GetAlert("SERVER_ERROR_FOUND").Type, message = GetAlert("SERVER_ERROR_FOUND").Message });
-            }
+                    result = serviceResult.Result,
+                    messageType = serviceResult.MessageType,
+                    message = serviceResult.Message,
+                    data = serviceResult.Data
+                });
         }
 
-
+        
         [HttpGet("getPickListMaster")]
         [AllowAnonymous]
-        public IActionResult GetPickListMaster(string fieldName)
+        public IActionResult GetPickListMaster([FromQuery] string fieldName)
         {
-            _log.Info("GetPickListMaster called.");
-            try
-            {
-                var pickList = _homeRepository.GetPickListMaster(fieldName);
-                if (pickList == null || !pickList.Any())
+            _log.Info($"GetPickListMaster called with fieldName: {fieldName}");
+           
+                var serviceResult = _homeRepository.GetPickListMaster(fieldName);
+
+                if (serviceResult.Result)
+                    _log.Info($"PickList fetched: {serviceResult.Message}");
+                else
+                    _log.Warn($"No PickList found: {serviceResult.Message}");
+
+                return StatusCode(serviceResult.StatusCode, new
                 {
-                    _log.Warn("No PickList found.");
-                    return NotFound(new { result = false, messageType = GetAlert("DATA_NOT_FOUND").Type, message = GetAlert("DATA_NOT_FOUND").Message });
-                }
-                _log.Info($"PickList fetched, Count: {pickList.Count()}");
-                return Ok(new { result = true, data = pickList });
-            }
-            catch (Exception ex)
-            {
-                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, messageType = GetAlert("SERVER_ERROR_FOUND").Type, message = GetAlert("SERVER_ERROR_FOUND").Message });
-            }
+                    result = serviceResult.Result,
+                    messageType = serviceResult.MessageType,
+                    message = serviceResult.Message,
+                    data = serviceResult.Data
+                });
+            
         }
 
         [HttpPost("createUpdateResponseMessage")]
         [Authorize]
         public IActionResult CreateUpdateResponseMessage([FromBody] ResponseMessageRequest request)
         {
-            _log.Info($"CreateUpdateResponseMessage called.");
-            try
-            {
+            _log.Info("CreateUpdateResponseMessage called.");
+           
                 if (!ModelState.IsValid)
                 {
                     _log.Warn("Invalid model state for Response message insert/update.");
-                    return BadRequest(new { result = false, messageType = GetAlert("MODEL_VALIDATION_FAILED").Type, message = GetAlert("MODEL_VALIDATION_FAILED").Message, errors = ModelState });
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                    return BadRequest(new
+                    {
+                        result = false,
+                        messageType = alert.Type,
+                        message = alert.Message,
+                        errors = ModelState
+                    });
                 }
 
-                // Get global values from claims or session
                 var globalValues = GetGlobalValues();
 
                 var jsonResult = _messageService.CreateUpdateResponseMessage(request, globalValues);
@@ -127,18 +116,22 @@ namespace HISWEBAPI.Controllers
                 if (result.result == false)
                 {
                     _log.Warn($"Response message operation failed: {result.message}");
-                    return Conflict(new { result = false, message = result.message.ToString() });
+                    return Conflict(new
+                    {
+                        result = false,
+                        messageType = result.messageType?.ToString() ?? "Error",
+                        message = result.message.ToString()
+                    });
                 }
 
-                _log.Info($"Response message operation completed successfully: {result.message}");
-                return Ok(new { result = true, message = result.message.ToString() });
-            }
-            catch (Exception ex)
-            {
-                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                return StatusCode(500, new { result = false, messageType = GetAlert("SERVER_ERROR_FOUND").Type, message = GetAlert("SERVER_ERROR_FOUND").Message });
-            }
+                _log.Info($"Response message operation completed: {result.message}");
+                return Ok(new
+                {
+                    result = true,
+                    messageType = result.messageType?.ToString() ?? "Info",
+                    message = result.message.ToString()
+                });
+          
         }
-
     }
 }

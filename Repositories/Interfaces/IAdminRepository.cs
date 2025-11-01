@@ -6,7 +6,7 @@ namespace HISWEBAPI.Repositories.Interfaces
 {
     public interface IAdminRepository
     {
-        string CreateUpdateRoleMaster(RoleMasterRequest request, AllGlobalValues globalValues);
-        IEnumerable<RoleMasterModel> RoleMasterList();
+        ServiceResult<string> CreateUpdateRoleMaster(RoleMasterRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<RoleMasterModel>> RoleMasterList();
     }
 }
