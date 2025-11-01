@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using HISWEBAPI.Data.Helpers;
 using HISWEBAPI.Models;
+using HISWEBAPI.DTO;
 using Microsoft.Extensions.Caching.Distributed;
 
 namespace HISWEBAPI.Services
@@ -15,11 +16,15 @@ namespace HISWEBAPI.Services
         private readonly IDistributedCache _distributedCache;
 
 
+
         public ResponseMessageService(ICustomSqlHelper sqlHelper, IDistributedCache distributedCache)
         {
             _sqlHelper = sqlHelper;
             _distributedCache = distributedCache;
+
         }
+     
+
 
         public (string Type, string Message) GetMessageAndTypeByAlertCode(string alertCode)
         {
@@ -86,12 +91,39 @@ namespace HISWEBAPI.Services
             }
         }
 
-        // Optional: to manually clear cache (for admin or background job)
-        public void ClearResponseMessageCache()
-        {
-            _distributedCache.Remove("_GetAllResponseMessagesCache");
-        }
 
-       
+        public string CreateUpdateResponseMessage(ResponseMessageRequest request, AllGlobalValues globalValues)
+        {
+            try
+            {
+                var result = _sqlHelper.DML("IU_ResponseMessageMaster", CommandType.StoredProcedure, new
+                {
+                    @id = request.Id,
+                    @typeId = request.TypeId,
+                    @type = request.Type,
+                    @alertCode = request.AlertCode,
+                    @message = request.Message,
+                    @isActive = request.IsActive,
+                    @userId = globalValues.userId,
+                    @ipAddress = globalValues.ipAddress
+                },
+                new
+                {
+                    result = 0
+                });
+
+                if (result < 0)
+                    return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = false, messageType = "Warn", message = "RECORD_ALREADY_EXISTS" });
+
+                if (request.Id == 0)
+                    return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = true, messageType = "Info", message = "DATA_SAVED_SUCCESSFULLY" });
+                else
+                    return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = true, messageType = "Info", message ="DATA_UPDATED_SUCCESSFULLY" });
+            }
+            catch (Exception ex)
+            {
+                return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = false, messageType = "Error", message = "SERVER_ERROR_FOUND" });
+            }
+        }
     }
 }

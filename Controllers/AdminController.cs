@@ -41,6 +41,22 @@ namespace HISWEBAPI.Controllers
             return _messageService.GetMessageAndTypeByAlertCode(alertCode);
         }
 
+        // Helper method to extract global values from the authenticated user context
+        private AllGlobalValues GetGlobalValues()
+        {
+            // Extract from JWT claims or session
+            var hospIdClaim = User.Claims.FirstOrDefault(c => c.Type == "hospId")?.Value;
+            var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "userId")?.Value;
+            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+            return new AllGlobalValues
+            {
+                hospId = int.TryParse(hospIdClaim, out int hospId) ? hospId : 0,
+                userId = int.TryParse(userIdClaim, out int userId) ? userId : 0,
+                ipAddress = ipAddress ?? "Unknown"
+            };
+        }
+
 
         [HttpPost("createUpdateRoleMaster")]
         [Authorize]
@@ -102,20 +118,6 @@ namespace HISWEBAPI.Controllers
             }
         }
 
-        // Helper method to extract global values from the authenticated user context
-        private AllGlobalValues GetGlobalValues()
-        {
-            // Extract from JWT claims or session
-            var hospIdClaim = User.Claims.FirstOrDefault(c => c.Type == "hospId")?.Value;
-            var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "userId")?.Value;
-            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
-
-            return new AllGlobalValues
-            {
-                hospId = int.TryParse(hospIdClaim, out int hospId) ? hospId : 0,
-                userId = int.TryParse(userIdClaim, out int userId) ? userId : 0,
-                ipAddress = ipAddress ?? "Unknown"
-            };
-        }
+       
     }
 }
