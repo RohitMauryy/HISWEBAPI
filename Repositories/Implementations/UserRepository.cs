@@ -43,7 +43,7 @@ namespace HISWEBAPI.Repositories.Implementations
         {
             try
             {
-                var dataTable = _sqlHelper.GetDataTable("sp_S_Login", CommandType.StoredProcedure, new
+                var dataTable = _sqlHelper.GetDataTable("S_UserLogin", CommandType.StoredProcedure, new
                 {
                     BranchId = request.BranchId,
                     UserName = request.UserName
@@ -90,8 +90,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     branchId = request.BranchId,
                     accessToken = accessToken,
                     refreshToken = refreshToken,
-                    tokenType = "Bearer",
-                    expiresIn = 3600
+                    tokenType = "Bearer"
                 };
 
                 var alert1 = _messageService.GetMessageAndTypeByAlertCode("LOGIN_SUCCESS");
@@ -832,7 +831,7 @@ namespace HISWEBAPI.Repositories.Implementations
         {
             try
             {
-                var result = _sqlHelper.GetDataTable("sp_StoreOtpForPasswordReset", CommandType.StoredProcedure,
+                var result = _sqlHelper.GetDataTable("IU_StoreOtpForPasswordReset", CommandType.StoredProcedure,
                     new { UserId = userId, Otp = otp, ExpiryMinutes = expiryMinutes });
 
                 if (result != null && result.Rows.Count > 0)
@@ -859,7 +858,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 new SqlParameter("@Message", SqlDbType.NVarChar, 255) { Direction = ParameterDirection.Output }
             };
 
-            _sqlHelper.RunProcedure("sp_VerifySmsOtp", parameters);
+            _sqlHelper.RunProcedure("S_VerifySmsOtp", parameters);
 
             int result = parameters[2].Value != DBNull.Value ? Convert.ToInt32(parameters[2].Value) : 0;
             string message = parameters[3].Value != DBNull.Value ? parameters[3].Value.ToString() : "Unknown error";
@@ -879,7 +878,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 new SqlParameter("@RegisteredEmail", SqlDbType.NVarChar, 255) { Direction = ParameterDirection.Output }
             };
 
-            _sqlHelper.RunProcedure("sp_ValidateUserForEmailPasswordReset", parameters);
+            _sqlHelper.RunProcedure("S_ValidateUserForEmailPasswordReset", parameters);
 
             bool userExists = parameters[2].Value != DBNull.Value && (bool)parameters[2].Value;
             bool emailMatch = parameters[3].Value != DBNull.Value && (bool)parameters[3].Value;
@@ -893,7 +892,7 @@ namespace HISWEBAPI.Repositories.Implementations
         {
             try
             {
-                var result = _sqlHelper.GetDataTable("sp_StoreEmailOtpForPasswordReset", CommandType.StoredProcedure,
+                var result = _sqlHelper.GetDataTable("IU_StoreEmailOtpForPasswordReset", CommandType.StoredProcedure,
                     new { UserId = userId, Otp = otp, ExpiryMinutes = expiryMinutes });
 
                 if (result != null && result.Rows.Count > 0)
@@ -920,7 +919,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 new SqlParameter("@Message", SqlDbType.NVarChar, 255) { Direction = ParameterDirection.Output }
             };
 
-            _sqlHelper.RunProcedure("sp_VerifyEmailOtp", parameters);
+            _sqlHelper.RunProcedure("S_VerifyEmailOtp", parameters);
 
             int result = parameters[2].Value != DBNull.Value ? Convert.ToInt32(parameters[2].Value) : 0;
             string message = parameters[3].Value != DBNull.Value ? parameters[3].Value.ToString() : "Unknown error";
@@ -941,7 +940,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     new SqlParameter("@Message", SqlDbType.NVarChar, 255) { Direction = ParameterDirection.Output }
                 };
 
-                _sqlHelper.RunProcedure("sp_ResetPasswordByUserId", parameters);
+                _sqlHelper.RunProcedure("U_ResetPasswordByUserId", parameters);
 
                 bool result = parameters[3].Value != DBNull.Value && (bool)parameters[3].Value;
                 string message = parameters[4].Value != DBNull.Value ? parameters[4].Value.ToString() : "Unknown error";
@@ -958,7 +957,7 @@ namespace HISWEBAPI.Repositories.Implementations
         {
             try
             {
-                var result = _sqlHelper.DML("sp_U_UserLoginSession", CommandType.StoredProcedure, new
+                var result = _sqlHelper.DML("U_UserLoginSession", CommandType.StoredProcedure, new
                 {
                     @SessionId = sessionId,
                     @Status = status,
@@ -977,7 +976,7 @@ namespace HISWEBAPI.Repositories.Implementations
         {
             try
             {
-                var result = _sqlHelper.DML("sp_I_UserRefreshToken", CommandType.StoredProcedure, new
+                var result = _sqlHelper.DML("IU_UserRefreshToken", CommandType.StoredProcedure, new
                 {
                     @UserId = userId,
                     @SessionId = sessionId,
@@ -1005,7 +1004,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     new SqlParameter("@UserId", SqlDbType.BigInt) { Direction = ParameterDirection.Output }
                 };
 
-                _sqlHelper.RunProcedure("sp_ValidateRefreshToken", parameters);
+                _sqlHelper.RunProcedure("S_ValidateRefreshToken", parameters);
 
                 bool isValid = parameters[1].Value != DBNull.Value && (bool)parameters[1].Value;
                 long sessionId = parameters[2].Value != DBNull.Value ? Convert.ToInt64(parameters[2].Value) : 0;
@@ -1023,7 +1022,7 @@ namespace HISWEBAPI.Repositories.Implementations
         {
             try
             {
-                var result = _sqlHelper.DML("sp_InvalidateRefreshToken", CommandType.StoredProcedure, new
+                var result = _sqlHelper.DML("U_InvalidateRefreshToken", CommandType.StoredProcedure, new
                 {
                     @SessionId = sessionId
                 });

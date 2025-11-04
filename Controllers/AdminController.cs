@@ -10,6 +10,7 @@ using HISWEBAPI.DTO;
 using HISWEBAPI.Models;
 using HISWEBAPI.Services;
 using Microsoft.AspNetCore.Authorization;
+using HISWEBAPI.Repositories.Implementations;
 
 namespace HISWEBAPI.Controllers
 {
@@ -93,6 +94,63 @@ namespace HISWEBAPI.Controllers
                 _log.Info($"Roles fetched successfully: {serviceResult.Message}");
             else
                 _log.Warn($"No roles found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getFaIconList")]
+        [Authorize]
+        public IActionResult getFaIconMaster()
+        {
+            _log.Info("getFaIconList called.");
+            var serviceResult = _adminRepository.getFaIconMaster();
+
+            if (serviceResult.Result)
+                _log.Info($"icon fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"No icon found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+
+        [HttpPost("CreateUpdateUserMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateUserMaster([FromBody] UserMasterRequest request)
+        {
+            _log.Info($"CreateUpdateUserMaster called. UserName={request.UserName}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for CreateUpdateUserMaster.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            var serviceResult = _adminRepository.CreateUpdateUserMaster(request);
+
+            if (serviceResult.Result)
+                _log.Info($"CreateUpdateUserMaster successful: {serviceResult.Message}");
+            else
+                _log.Warn($"CreateUpdateUserMaster failed: {serviceResult.Message}");
 
             return StatusCode(serviceResult.StatusCode, new
             {

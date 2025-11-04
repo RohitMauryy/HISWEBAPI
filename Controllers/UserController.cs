@@ -389,25 +389,13 @@ namespace HISWEBAPI.Controllers
             });
         }
 
-        [HttpPost("getUserRoles")]
+        [HttpGet("getUserRoles")]
         [Authorize]
-        public IActionResult GetUserRoles([FromBody] UserRoleRequest request)
+        public IActionResult GetUserRoles([FromQuery] int branchId, int userId)
         {
-            _log.Info($"GetUserRoles called. UserId={request.UserId}");
+            _log.Info($"GetUserRoles called. UserId={userId}");
 
-            if (!ModelState.IsValid)
-            {
-                _log.Warn("Invalid model state for get user roles.");
-                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
-                return BadRequest(new
-                {
-                    result = false,
-                    messageType = alert.Type,
-                    message = alert.Message,
-                    errors = ModelState
-                });
-            }
-
+            var request = new UserRoleRequest { BranchId = branchId, UserId = userId };
             var serviceResult = _userRepository.GetUserRoles(request);
 
             if (serviceResult.Result)
@@ -423,5 +411,6 @@ namespace HISWEBAPI.Controllers
                 data = serviceResult.Data
             });
         }
+
     }
 }

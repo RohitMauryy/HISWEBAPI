@@ -8,5 +8,8 @@ namespace HISWEBAPI.Repositories.Interfaces
     {
         ServiceResult<string> CreateUpdateRoleMaster(RoleMasterRequest request, AllGlobalValues globalValues);
         ServiceResult<IEnumerable<RoleMasterModel>> RoleMasterList();
+        ServiceResult<IEnumerable<FaIconModel>> getFaIconMaster();
+        ServiceResult<UserMasterModel> CreateUpdateUserMaster(UserMasterRequest request);
+
     }
 }
