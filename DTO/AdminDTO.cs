@@ -64,8 +64,27 @@ namespace HISWEBAPI.DTO
         [Required(ErrorMessage = "Gender is required")]
         [RegularExpression("^(Male|Female|Other)$", ErrorMessage = "Gender must be Male, Female, or Other")]
         public string Gender { get; set; }
+        public int IsActive { get; set; }
+        public string EmployeeID { get; set; }
         public int ReportToUserId { get; set; }
         public int UserDepartmentId { get; set; }
 
+    }
+
+    public class UserMasterResponse
+    {
+        public long userId { get; set; }
+    }
+
+    public class UserDepartmentRequest
+    {
+        public int Id { get; set; }
+
+        [Required(ErrorMessage = "Department name is required")]
+        [StringLength(200, ErrorMessage = "Department name cannot exceed 200 characters")]
+        public required string DepartmentName { get; set; }
+
+        [Required(ErrorMessage = "IsActive is required")]
+        public int IsActive { get; set; }
     }
 }

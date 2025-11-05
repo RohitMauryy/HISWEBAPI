@@ -43,8 +43,41 @@
       
     }
 
+  
+
     public class UserMasterModel
     {
-        public long userId { get; set; }
+        public int Id { get; set; }
+        public string? FirstName { get; set; }
+        public string? MidelName { get; set; }
+        public string? LastName { get; set; }
+        public string? DOB { get; set; }
+        public string? Gender { get; set; }
+        public required string UserName { get; set; }
+        public string? Password { get; set; }
+        public string? Address { get; set; }
+        public string? Contact { get; set; }
+        public string? Email { get; set; }
+        public int IsActive { get; set; }
+        public string? EmployeeID { get; set; }
+        public string? CreatedBy { get; set; }
+        public string? CreatedOn { get; set; }
+        public string? LastModifiedBy { get; set; }
+        public string? LastModifiedOn { get; set; }
+        public int? ReportToUserId { get; set; }
+        public int? UserDepartmentId { get; set; }
+    }
+
+
+    public class UserDepartmentMasterModel
+    {
+        public int Id { get; set; }
+        public required string DepartmentName { get; set; }
+        public int IsActive { get; set; }
+        public string? CreatedBy { get; set; }
+        public string? CreatedOn { get; set; }
+        public string? LastModifiedBy { get; set; }
+        public string? LastModifiedOn { get; set; }
+        public string? IPAddress { get; set; }
     }
 }

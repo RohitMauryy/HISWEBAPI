@@ -161,5 +161,77 @@ namespace HISWEBAPI.Controllers
             });
         }
 
+
+        [HttpGet("userMasterList")]
+        [Authorize]
+        public IActionResult UserMasterList()
+        {
+            _log.Info("UserMasterList called.");
+            var serviceResult = _adminRepository.UserMasterList();
+            if (serviceResult.Result)
+                _log.Info($"Users fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"No users found: {serviceResult.Message}");
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+
+        [HttpPost("createUpdateUserDepartment")]
+        [Authorize]
+        public IActionResult CreateUpdateUserDepartment([FromBody] UserDepartmentRequest request)
+        {
+            _log.Info("CreateUpdateUserDepartment called.");
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for department insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+            var globalValues = GetGlobalValues();
+            var serviceResult = _adminRepository.CreateUpdateUserDepartment(request, globalValues);
+            if (serviceResult.Result)
+                _log.Info($"Department operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"Department operation failed: {serviceResult.Message}");
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("userDepartmentList")]
+        [Authorize]
+        public IActionResult UserDepartmentList()
+        {
+            _log.Info("UserDepartmentList called.");
+            var serviceResult = _adminRepository.UserDepartmentList();
+            if (serviceResult.Result)
+                _log.Info($"Departments fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"No departments found: {serviceResult.Message}");
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
     }
 }

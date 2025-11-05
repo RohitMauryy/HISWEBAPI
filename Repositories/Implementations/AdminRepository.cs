@@ -197,12 +197,13 @@ namespace HISWEBAPI.Repositories.Implementations
         }
 
 
-        public ServiceResult<UserMasterModel> CreateUpdateUserMaster(UserMasterRequest request)
+        public ServiceResult<UserMasterResponse> CreateUpdateUserMaster(UserMasterRequest request)
         {
             try
             {
                 SqlParameter[] parameters = new SqlParameter[]
                 {
+                    new SqlParameter("@HospId",1),
                     new SqlParameter("@Address", request.Address ?? (object)DBNull.Value),
                     new SqlParameter("@Contact", request.Contact ?? (object)DBNull.Value),
                     new SqlParameter("@DOB", request.DOB != default(DateTime) ? (object)request.DOB : DBNull.Value),
@@ -213,39 +214,47 @@ namespace HISWEBAPI.Repositories.Implementations
                     new SqlParameter("@Password", PasswordHasher.HashPassword(request.Password)),
                     new SqlParameter("@UserName", request.UserName),
                     new SqlParameter("@Gender", request.Gender ?? (object)DBNull.Value),
+                    new SqlParameter("@UserId",request.userId),
+                    new SqlParameter("@IsActive",request.IsActive),
+                    new SqlParameter("@EmployeeID",request.EmployeeID),
+                    new SqlParameter("@UserDepartmentId",request.UserDepartmentId),
+                    new SqlParameter("@ReportToUserId",request.ReportToUserId),
                     new SqlParameter("@Result", SqlDbType.BigInt) { Direction = ParameterDirection.Output }
                 };
 
-                long result = _sqlHelper.RunProcedureInsert("I_NewUserSignUp", parameters);
+                long result = _sqlHelper.RunProcedureInsert("IU_UserMaster", parameters);
 
                 if (result == -1)
                 {
                     var alert = _messageService.GetMessageAndTypeByAlertCode("USERNAME_EXISTS");
                     _log.Warn($"Duplicate username attempted: {request.UserName}");
-                    return ServiceResult<UserMasterModel>.Failure(
+                    return ServiceResult<UserMasterResponse>.Failure(
                         alert.Type,
                         alert.Message,
                         409
                     );
                 }
 
-                if (result == -2)
-                {
-                    var alert = _messageService.GetMessageAndTypeByAlertCode("LICENSE_LIMIT_REACHED");
-                    _log.Warn("License validation failed for user insert");
-                    return ServiceResult<UserMasterModel>.Failure(
-                        alert.Type,
-                        alert.Message,
-                        400
-                    );
-                }
+               
 
-                if (result > 0)
+                if (request.userId == 0)
                 {
-                    var responseData = new UserMasterModel { userId = result };
+                    var responseData = new UserMasterResponse { userId = result };
                     var alert = _messageService.GetMessageAndTypeByAlertCode("USER_CREATED");
                     _log.Info($"User inserted successfully. UserId={result}");
-                    return ServiceResult<UserMasterModel>.Success(
+                    return ServiceResult<UserMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        201
+                    );
+                }
+                if (request.userId > 0)
+                {
+                    var responseData = new UserMasterResponse { userId = result };
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
+                    _log.Info($"User Updated successfully. UserId={result}");
+                    return ServiceResult<UserMasterResponse>.Success(
                         responseData,
                         alert.Type,
                         alert.Message,
@@ -255,7 +264,7 @@ namespace HISWEBAPI.Repositories.Implementations
 
                 var alert1 = _messageService.GetMessageAndTypeByAlertCode("USER_SAVE_FAILED");
                 _log.Error("Failed to insert user. Result=0");
-                return ServiceResult<UserMasterModel>.Failure(
+                return ServiceResult<UserMasterResponse>.Failure(
                     alert1.Type,
                     alert1.Message,
                     500
@@ -265,7 +274,182 @@ namespace HISWEBAPI.Repositories.Implementations
             {
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
                 var alert = _messageService.GetMessageAndTypeByAlertCode("SIGNUP_ERROR");
-                return ServiceResult<UserMasterModel>.Failure(
+                return ServiceResult<UserMasterResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
+        public ServiceResult<IEnumerable<UserMasterModel>> UserMasterList()
+        {
+            try
+            {
+                var dataTable = _sqlHelper.GetDataTable(
+                    "S_GetUserMasterList",
+                    CommandType.StoredProcedure,
+                    new { }
+                );
+
+                var users = dataTable?.AsEnumerable().Select(row => new UserMasterModel
+                {
+                    Id = row.Field<int>("Id"),
+                    FirstName = row.Field<string>("FirstName"),
+                    MidelName = row.Field<string>("MidelName"),
+                    LastName = row.Field<string>("LastName"),
+                    DOB = row.Field<string>("DOB"),
+                    Gender = row.Field<string>("Gender"),
+                    UserName = row.Field<string>("UserName") ?? string.Empty,
+                    Password = row.Field<string>("Password"),
+                    Address = row.Field<string>("Address"),
+                    Contact = row.Field<string>("Contact"),
+                    Email = row.Field<string>("Email"),
+                    IsActive = row.Field<int>("IsActive"),
+                    EmployeeID = row.Field<string>("EmployeeID"),
+                    CreatedBy = row.Field<string>("CreatedBy"),
+                    CreatedOn = row.Field<string>("CreatedOn"),
+                    LastModifiedBy = row.Field<string>("LastModifiedBy"),
+                    LastModifiedOn = row.Field<string>("LastModifiedOn"),
+                    ReportToUserId = row.Field<int?>("ReportToUserId"),
+                    UserDepartmentId = row.Field<int?>("UserDepartmentId")
+                }).ToList() ?? new List<UserMasterModel>();
+
+                if (!users.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    return ServiceResult<IEnumerable<UserMasterModel>>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        404 // Not Found
+                    );
+                }
+
+                return ServiceResult<IEnumerable<UserMasterModel>>.Success(
+                    users,
+                    "Info",
+                    $"{users.Count} users fetched successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<UserMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
+        public ServiceResult<string> CreateUpdateUserDepartment(UserDepartmentRequest request, AllGlobalValues globalValues)
+        {
+            try
+            {
+                var result = _sqlHelper.DML("IU_UserDepartmentMaster", CommandType.StoredProcedure, new
+                {
+                    @Id = request.Id,
+                    @DepartmentName = request.DepartmentName,
+                    @IsActive = request.IsActive,
+                    @userId = globalValues.userId,
+                    @IpAddress = globalValues.ipAddress
+                },
+                new
+                {
+                    result = 0
+                });
+
+                if (result < 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        409 // Conflict
+                    );
+                }
+
+                if (request.Id == 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
+                    return ServiceResult<string>.Success(
+                        "Department created successfully",
+                        alert.Type,
+                        alert.Message,
+                        201 // Created
+                    );
+                }
+                else
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
+                    return ServiceResult<string>.Success(
+                        "Department updated successfully",
+                        alert.Type,
+                        alert.Message,
+                        200 // OK
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<string>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<UserDepartmentMasterModel>> UserDepartmentList()
+        {
+            try
+            {
+                var dataTable = _sqlHelper.GetDataTable(
+                    "S_GetUserDepartmentList",
+                    CommandType.StoredProcedure,
+                    new { }
+                );
+
+                var departments = dataTable?.AsEnumerable().Select(row => new UserDepartmentMasterModel
+                {
+                    Id = row.Field<int>("Id"),
+                    DepartmentName = row.Field<string>("DepartmentName") ?? string.Empty,
+                    IsActive = row.Field<int>("IsActive"),
+                    CreatedBy = row.Field<string>("CreatedBy"),
+                    CreatedOn = row.Field<string>("CreatedOn"),
+                    LastModifiedBy = row.Field<string>("LastModifiedBy"),
+                    LastModifiedOn = row.Field<string>("LastModifiedOn"),
+                    IPAddress = row.Field<string>("IPAddress")
+                }).ToList() ?? new List<UserDepartmentMasterModel>();
+
+                if (!departments.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    return ServiceResult<IEnumerable<UserDepartmentMasterModel>>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        404 // Not Found
+                    );
+                }
+
+                return ServiceResult<IEnumerable<UserDepartmentMasterModel>>.Success(
+                    departments,
+                    "Info",
+                    $"{departments.Count} departments fetched successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<UserDepartmentMasterModel>>.Failure(
                     alert.Type,
                     alert.Message,
                     500
