@@ -87,4 +87,127 @@ namespace HISWEBAPI.DTO
         [Required(ErrorMessage = "IsActive is required")]
         public int IsActive { get; set; }
     }
+
+    public class UserGroupRequest
+    {
+        public int Id { get; set; }
+
+        [Required(ErrorMessage = "Group name is required")]
+        [StringLength(200, ErrorMessage = "Group name cannot exceed 200 characters")]
+        public required string GroupName { get; set; }
+
+        [Required(ErrorMessage = "IsActive is required")]
+        public int IsActive { get; set; }
+    }
+
+    public class UserGroupMembersRequest
+    {
+        [Required(ErrorMessage = "GroupId is required")]
+        public int GroupId { get; set; }
+
+        [Required(ErrorMessage = "UserIds are required")]
+        [MinLength(1, ErrorMessage = "At least one user must be selected")]
+        public required List<int> UserIds { get; set; }
+    }
+
+    public class UserRoleMappingRequest
+    {
+        [Required(ErrorMessage = "UserId is required")]
+        public int userId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int branchId { get; set; }
+
+        [Required(ErrorMessage = "TypeId is required")]
+        public int typeId { get; set; }
+
+        [Required(ErrorMessage = "RoleId is required")]
+        public int roleId { get; set; }
+    }
+
+    public class UserRoleMappingListRequest
+    {
+        [Required(ErrorMessage = "UserId is required")]
+        public int userId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int branchId { get; set; }
+
+        [Required(ErrorMessage = "TypeId is required")]
+        public int typeId { get; set; }
+
+        public List<UserRoleMappingRequest>? userRoleMappings { get; set; }
+    }
+
+
+    public class UserRightsRequest
+    {
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "RoleId is required")]
+        public int RoleId { get; set; }
+
+        [Required(ErrorMessage = "UserRightId is required")]
+        public int UserRightId { get; set; }
+    }
+
+    public class SaveUserRightMappingRequest
+    {
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "RoleId is required")]
+        public int RoleId { get; set; }
+
+        public List<UserRightsRequest> UserRights { get; set; } = new List<UserRightsRequest>();
+    }
+
+
+    public class DashboardUserRightsRequest
+    {
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "RoleId is required")]
+        public int RoleId { get; set; }
+
+        [Required(ErrorMessage = "UserRightId is required")]
+        public int UserRightId { get; set; }
+    }
+
+    public class SaveDashboardUserRightMappingRequest
+    {
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "RoleId is required")]
+        public int RoleId { get; set; }
+
+        public List<DashboardUserRightsRequest> DashboardUserRights { get; set; } = new List<DashboardUserRightsRequest>();
+    }
 }

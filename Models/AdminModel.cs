@@ -80,4 +80,55 @@
         public string? LastModifiedOn { get; set; }
         public string? IPAddress { get; set; }
     }
+
+    public class UserGroupMasterModel
+    {
+        public int Id { get; set; }
+        public required string GroupName { get; set; }
+        public int IsActive { get; set; }
+        public string? CreatedBy { get; set; }
+        public string? CreatedOn { get; set; }
+        public string? LastModifiedBy { get; set; }
+        public string? LastModifiedOn { get; set; }
+        public string? IPAddress { get; set; }
+    }
+
+    public class UserGroupMembersModel
+    {
+        public int Id { get; set; }
+        public int GroupId { get; set; }
+        public int UserId { get; set; }
+        public string? GroupName { get; set; }
+        public string? UserName { get; set; }
+        public int IsActive { get; set; }
+        public string? CreatedBy { get; set; }
+        public string? CreatedOn { get; set; }
+        public string? LastModifiedBy { get; set; }
+        public string? LastModifiedOn { get; set; }
+        public string? IPAddress { get; set; }
+    }
+
+    public class UserRoleMappingModel
+    {
+        public int isGranted { get; set; }
+        public required string RoleName { get; set; }
+        public int RoleId { get; set; }
+    }
+
+
+    public class UserRightMappingModel
+    {
+        public int IsGranted { get; set; }
+        public required string UserRightName { get; set; }
+        public string? Description { get; set; }
+        public int UserRightId { get; set; }
+    }
+
+    public class DashboardUserRightMappingModel
+    {
+        public int IsGranted { get; set; }
+        public required string UserRightName { get; set; }
+        public string? Details { get; set; }
+        public int UserRightId { get; set; }
+    }
 }

@@ -99,29 +99,31 @@ namespace HISWEBAPI.Services
         {
             try
             {
-                var result = _sqlHelper.DML("IU_ResponseMessageMaster", CommandType.StoredProcedure, new
-                {
-                    @id = request.Id,
-                    @typeId = request.TypeId,
-                    @type = request.Type,
-                    @alertCode = request.AlertCode,
-                    @message = request.Message,
-                    @isActive = request.IsActive,
-                    @userId = globalValues.userId,
-                    @ipAddress = globalValues.ipAddress
-                },
-                new
-                {
-                    result = 0
-                });
+                var result = _sqlHelper.ExecuteScalar(
+                    "IU_ResponseMessageMaster",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        @id = request.Id,
+                        @typeId = request.TypeId,
+                        @type = request.Type,
+                        @alertCode = request.AlertCode,
+                        @message = request.Message,
+                        @isActive = request.IsActive,
+                        @userId = globalValues.userId,
+                        @ipAddress = globalValues.ipAddress
+                    }
+                );
 
-                if (result < 0)
+                int resultValue = Convert.ToInt32(result);
+
+                if (resultValue < 0)
                     return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = false, messageType = "Warn", message = "RECORD_ALREADY_EXISTS" });
 
                 if (request.Id == 0)
                     return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = true, messageType = "Info", message = "DATA_SAVED_SUCCESSFULLY" });
                 else
-                    return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = true, messageType = "Info", message ="DATA_UPDATED_SUCCESSFULLY" });
+                    return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = true, messageType = "Info", message = "DATA_UPDATED_SUCCESSFULLY" });
             }
             catch (Exception ex)
             {
@@ -129,5 +131,6 @@ namespace HISWEBAPI.Services
                 return Newtonsoft.Json.JsonConvert.SerializeObject(new { result = false, messageType = "Error", message = "SERVER_ERROR_FOUND" });
             }
         }
+
     }
 }
