@@ -11,6 +11,7 @@ using HISWEBAPI.Models;
 using HISWEBAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using HISWEBAPI.Repositories.Implementations;
+using HISWEBAPI.Models.Configuration;
 
 namespace HISWEBAPI.Controllers
 {
@@ -30,21 +31,7 @@ namespace HISWEBAPI.Controllers
             _messageService = messageService;
         }
 
-        private AllGlobalValues GetGlobalValues()
-        {
-            var hospIdClaim = User.Claims.FirstOrDefault(c => c.Type == "hospId")?.Value;
-            var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "userId")?.Value;
-            var branchIdClaim = User.Claims.FirstOrDefault(c => c.Type == "branchId")?.Value;
-            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
-
-            return new AllGlobalValues
-            {
-                hospId = int.TryParse(hospIdClaim, out int hospId) ? hospId : 0,
-                userId = int.TryParse(userIdClaim, out int userId) ? userId : 0,
-                branchId = int.TryParse(branchIdClaim, out int branchId) ? branchId : 0,
-                ipAddress = ipAddress ?? "Unknown"
-            };
-        }
+       
 
         [HttpPost("createUpdateRoleMaster")]
         [Authorize]
@@ -65,8 +52,7 @@ namespace HISWEBAPI.Controllers
                 });
             }
 
-            var globalValues = GetGlobalValues();
-
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
             var serviceResult = _adminRepository.CreateUpdateRoleMaster(request, globalValues);
 
             if (serviceResult.Result)
@@ -201,7 +187,7 @@ namespace HISWEBAPI.Controllers
                     errors = ModelState
                 });
             }
-            var globalValues = GetGlobalValues();
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
             var serviceResult = _adminRepository.CreateUpdateUserDepartment(request, globalValues);
             if (serviceResult.Result)
                 _log.Info($"Department operation completed: {serviceResult.Message}");
@@ -252,7 +238,7 @@ namespace HISWEBAPI.Controllers
                     errors = ModelState
                 });
             }
-            var globalValues = GetGlobalValues();
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
             var serviceResult = _adminRepository.CreateUpdateUserGroupMaster(request, globalValues);
             if (serviceResult.Result)
                 _log.Info($"Group operation completed: {serviceResult.Message}");
@@ -304,7 +290,7 @@ namespace HISWEBAPI.Controllers
                     errors = ModelState
                 });
             }
-            var globalValues = GetGlobalValues();
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
             var serviceResult = _adminRepository.CreateUpdateUserGroupMembers(request, globalValues);
             if (serviceResult.Result)
                 _log.Info($"Group members operation completed: {serviceResult.Message}");
@@ -388,7 +374,7 @@ namespace HISWEBAPI.Controllers
                 _log.Info($"Removing all roles for UserId={request.userId}, BranchId={request.branchId}, TypeId={request.typeId}");
             }
 
-            var globalValues = GetGlobalValues();
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
 
             var serviceResult = _adminRepository.SaveUpdateRoleMapping(
                 request.userId,
@@ -466,7 +452,7 @@ namespace HISWEBAPI.Controllers
                 });
             }
 
-            var globalValues = GetGlobalValues();
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
 
             var serviceResult = _adminRepository.SaveUpdateUserRightMapping(request, globalValues);
 
@@ -546,7 +532,7 @@ namespace HISWEBAPI.Controllers
                 });
             }
 
-            var globalValues = GetGlobalValues();
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
 
             var serviceResult = _adminRepository.SaveUpdateDashBoardUserRightMapping(request, globalValues);
 
@@ -624,7 +610,7 @@ namespace HISWEBAPI.Controllers
                 });
             }
 
-            var globalValues = GetGlobalValues();
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
 
             var serviceResult = _adminRepository.CreateUpdateNavigationTabMaster(request, globalValues);
 

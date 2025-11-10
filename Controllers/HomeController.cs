@@ -9,6 +9,7 @@ using HISWEBAPI.DTO;
 using HISWEBAPI.Services;
 using HISWEBAPI.Models;
 using Microsoft.AspNetCore.Authorization;
+using HISWEBAPI.Models.Configuration;
 
 namespace HISWEBAPI.Controllers
 {
@@ -28,21 +29,7 @@ namespace HISWEBAPI.Controllers
             _messageService = messageService;
         }
 
-        private AllGlobalValues GetGlobalValues()
-        {
-            var hospIdClaim = User.Claims.FirstOrDefault(c => c.Type == "hospId")?.Value;
-            var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "userId")?.Value;
-            var branchIdClaim = User.Claims.FirstOrDefault(c => c.Type == "branchId")?.Value;
-            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
-
-            return new AllGlobalValues
-            {
-                hospId = int.TryParse(hospIdClaim, out int hospId) ? hospId : 0,
-                userId = int.TryParse(userIdClaim, out int userId) ? userId : 0,
-                branchId = int.TryParse(branchIdClaim, out int branchId) ? branchId : 0,
-                ipAddress = ipAddress ?? "Unknown"
-            };
-        }
+      
 
 
         [HttpGet("getActiveBranchList")]
@@ -110,7 +97,7 @@ namespace HISWEBAPI.Controllers
                     });
                 }
 
-                var globalValues = GetGlobalValues();
+                var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
 
                 var jsonResult = _messageService.CreateUpdateResponseMessage(request, globalValues);
                 var result = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(jsonResult);
