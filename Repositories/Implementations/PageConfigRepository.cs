@@ -40,17 +40,7 @@ namespace HISWEBAPI.Repositories.Implementations
             {
                 _log.Info($"CreateUpdatePageConfig called. ConfigKey={request.ConfigKey}, Id={request.Id}");
 
-                // Validate JSON format
-                if (!IsValidJson(request.ConfigJson))
-                {
-                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_JSON_FORMAT");
-                    _log.Warn($"Invalid JSON format for ConfigKey: {request.ConfigKey}");
-                    return ServiceResult<int>.Failure(
-                        alert.Type,
-                        alert.Message,
-                        400
-                    );
-                }
+               
 
                 var dataTable = _sqlHelper.GetDataTable(
                     "IU_PageConfigMaster",
@@ -249,26 +239,5 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-        #region Private Helper Methods
-
-        private bool IsValidJson(string jsonString)
-        {
-            if (string.IsNullOrWhiteSpace(jsonString))
-                return false;
-
-            try
-            {
-                JsonDocument.Parse(jsonString);
-                return true;
-            }
-            catch (JsonException)
-            {
-                return false;
-            }
-        }
-
-       
-
-        #endregion
     }
 }

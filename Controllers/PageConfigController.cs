@@ -31,34 +31,75 @@ namespace HISWEBAPI.Controllers
         {
             var hospIdClaim = User.Claims.FirstOrDefault(c => c.Type == "hospId")?.Value;
             var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "userId")?.Value;
+            var branchIdClaim = User.Claims.FirstOrDefault(c => c.Type == "branchId")?.Value;
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
 
             return new AllGlobalValues
             {
                 hospId = int.TryParse(hospIdClaim, out int hospId) ? hospId : 0,
                 userId = int.TryParse(userIdClaim, out int userId) ? userId : 0,
+                branchId = int.TryParse(branchIdClaim, out int branchId) ? branchId : 0,
                 ipAddress = ipAddress ?? "Unknown"
             };
         }
 
         [HttpPost("createUpdateConfigMaster")]
         [Authorize]
-        public IActionResult CreateUpdateConfigMaster([FromBody] PageConfigRequest request)
+        public IActionResult CreateUpdateConfigMaster(
+           [FromQuery] int id,
+           [FromQuery] string configKey,
+           [FromBody] string configJson)
         {
-            _log.Info($"CreateUpdateConfigMaster called. ConfigKey={request?.ConfigKey}, Id={request?.Id}");
+            _log.Info($"CreateUpdateConfigMaster called. ConfigKey={configKey}, Id={id}");
 
-            if (!ModelState.IsValid)
+            // Manual validation since parameters are separated
+            if (string.IsNullOrWhiteSpace(configKey))
             {
-                _log.Warn("Invalid model state for page config create/update.");
-                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                _log.Warn("ConfigKey is missing or empty.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
                 return BadRequest(new
                 {
                     result = false,
                     messageType = alert.Type,
-                    message = alert.Message,
-                    errors = ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
+                    message = "ConfigKey is required",
+                    errors = new[] { "ConfigKey cannot be empty" }
                 });
             }
+
+            if (configKey.Length > 256)
+            {
+                _log.Warn($"ConfigKey exceeds maximum length: {configKey.Length}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "ConfigKey cannot exceed 256 characters",
+                    errors = new[] { $"ConfigKey length: {configKey.Length}, Maximum: 256" }
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(configJson))
+            {
+                _log.Warn("ConfigJson is missing or empty.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "ConfigJson is required",
+                    errors = new[] { "ConfigJson cannot be empty" }
+                });
+            }
+
+            // Create request object
+            var request = new PageConfigRequest
+            {
+                Id = id,
+                ConfigKey = configKey,
+                ConfigJson = configJson,
+                IsActive = true
+            };
 
             var globalValues = GetGlobalValues();
             var serviceResult = _pageConfigRepository.CreateUpdatePageConfig(request, globalValues);

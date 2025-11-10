@@ -8,7 +8,6 @@ using HISWEBAPI.Configuration;
 
 namespace HISWEBAPI.Services
 {
-
     public class JwtService : IJwtService
     {
         private readonly JwtSettings _jwtSettings;
@@ -18,12 +17,16 @@ namespace HISWEBAPI.Services
             _jwtSettings = jwtSettings.Value;
         }
 
-        public string GenerateToken(string userId, string username)
+        // Updated to include hospId and branchId
+        public string GenerateToken(string userId, string username, int hospId, int branchId)
         {
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, userId),
                 new Claim(ClaimTypes.Name, username),
+                new Claim("userId", userId),  // Custom claim for easier access
+                new Claim("hospId", hospId.ToString()),  // Add hospId
+                new Claim("branchId", branchId.ToString()),  // Add branchId
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString())
             };

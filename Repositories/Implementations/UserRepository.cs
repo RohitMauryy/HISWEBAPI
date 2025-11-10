@@ -76,7 +76,16 @@ namespace HISWEBAPI.Repositories.Implementations
                 }
 
                 int userId = (int)Convert.ToInt64(userRow["Id"]);
-                string accessToken = _jwtService.GenerateToken(userId.ToString(), request.UserName);
+                int hospId = 1; 
+                int branchId = request.BranchId;
+
+                // Generate token with userId, username, hospId, and branchId
+                string accessToken = _jwtService.GenerateToken(
+                    userId.ToString(),
+                    request.UserName,
+                    hospId,
+                    branchId
+                );
                 string refreshToken = _jwtService.GenerateRefreshToken();
 
                 var responseData = new UserLoginResponseData
@@ -87,14 +96,14 @@ namespace HISWEBAPI.Repositories.Implementations
                     contact = Convert.ToString(userRow["Contact"]),
                     isContactVerified = Convert.ToBoolean(userRow["IsContactVerified"]),
                     isEmailVerified = Convert.ToBoolean(userRow["IsEmailVerified"]),
-                    branchId = request.BranchId,
+                    branchId = branchId,
                     accessToken = accessToken,
                     refreshToken = refreshToken,
                     tokenType = "Bearer"
                 };
 
                 var alert1 = _messageService.GetMessageAndTypeByAlertCode("LOGIN_SUCCESS");
-                _log.Info($"Login successful for UserId={userId}");
+                _log.Info($"Login successful for UserId={userId}, HospId={hospId}, BranchId={branchId}");
 
                 return ServiceResult<UserLoginResponseData>.Success(
                     responseData,
@@ -114,7 +123,6 @@ namespace HISWEBAPI.Repositories.Implementations
                 );
             }
         }
-
         public ServiceResult<TokenResponseData> RefreshToken(RefreshTokenRequest request)
         {
             try
@@ -131,8 +139,14 @@ namespace HISWEBAPI.Repositories.Implementations
                     );
                 }
 
+                // Extract claims from the expired token
                 var userId = principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 var username = principal.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+                var hospIdClaim = principal.FindFirst("hospId")?.Value;
+                var branchIdClaim = principal.FindFirst("branchId")?.Value;
+
+                int hospId = int.TryParse(hospIdClaim, out int parsedHospId) ? parsedHospId : 1;
+                int branchId = int.TryParse(branchIdClaim, out int parsedBranchId) ? parsedBranchId : 0;
 
                 var (isValid, sessionId, userIdFromToken) = ValidateRefreshTokenInternal(request.RefreshToken);
 
@@ -147,7 +161,13 @@ namespace HISWEBAPI.Repositories.Implementations
                     );
                 }
 
-                var newAccessToken = _jwtService.GenerateToken(userId ?? "", username ?? "");
+                // Generate new tokens with all claims
+                var newAccessToken = _jwtService.GenerateToken(
+                    userId ?? "",
+                    username ?? "",
+                    hospId,
+                    branchId
+                );
                 var newRefreshToken = _jwtService.GenerateRefreshToken();
 
                 bool tokenSaved = SaveRefreshTokenInternal(userIdFromToken, sessionId, newRefreshToken, DateTime.UtcNow.AddDays(7));
@@ -161,12 +181,11 @@ namespace HISWEBAPI.Repositories.Implementations
                 {
                     accessToken = newAccessToken,
                     refreshToken = newRefreshToken,
-                    tokenType = "Bearer",
-                    expiresIn = 3600
+                    tokenType = "Bearer"
                 };
 
                 var alert1 = _messageService.GetMessageAndTypeByAlertCode("TOKEN_REFRESHED");
-                _log.Info($"Token refreshed successfully for UserId={userId}");
+                _log.Info($"Token refreshed successfully for UserId={userId}, HospId={hospId}, BranchId={branchId}");
 
                 return ServiceResult<TokenResponseData>.Success(
                     responseData,
@@ -186,7 +205,6 @@ namespace HISWEBAPI.Repositories.Implementations
                 );
             }
         }
-
         public ServiceResult<string> Logout(LogoutRequest request)
         {
             try
