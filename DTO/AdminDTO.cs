@@ -3,8 +3,41 @@ using HISWEBAPI.Attributes;
 
 namespace HISWEBAPI.DTO
 {
+    public class PageConfigRequest
+    {
+       
+        public int Id { get; set; } = 0;
 
-   
+        [Required(ErrorMessage = "ConfigKey is required")]
+        [StringLength(256, ErrorMessage = "ConfigKey cannot exceed 256 characters")]
+        public string ConfigKey { get; set; }
+
+        [Required(ErrorMessage = "ConfigJson is required")]
+        public string ConfigJson { get; set; }
+
+        public bool IsActive { get; set; } = true;
+    }
+
+    public class PageConfigResponse
+    {
+        public int Id { get; set; }
+        public string ConfigKey { get; set; }
+        public string ConfigJson { get; set; }
+        public bool IsActive { get; set; }
+        public int? CreatedBy { get; set; }
+        public DateTime CreatedOn { get; set; }
+        public int? LastModifiedBy { get; set; }
+        public DateTime? LastModifiedOn { get; set; }
+        public string IpAddress { get; set; }
+    }
+
+    
+    public class GetPageConfigRequest
+    {
+        [StringLength(256, ErrorMessage = "ConfigKey cannot exceed 256 characters")]
+        public string ConfigKey { get; set; }
+    }
+
     public class RoleMasterRequest
     {
         public int RoleId { get; set; } = 0;
@@ -209,5 +242,21 @@ namespace HISWEBAPI.DTO
         public int RoleId { get; set; }
 
         public List<DashboardUserRightsRequest> DashboardUserRights { get; set; } = new List<DashboardUserRightsRequest>();
+    }
+
+    public class NavigationTabMasterRequest
+    {
+        public int TabId { get; set; } = 0;
+
+        [Required(ErrorMessage = "Tab name is required")]
+        [StringLength(100, ErrorMessage = "Tab name cannot exceed 100 characters")]
+        public string TabName { get; set; }
+
+        [Required(ErrorMessage = "FaIconId is required")]
+        public int FaIconId { get; set; }
+    }
+    public class NavigationTabMasterResponse
+    {
+        public int TabId { get; set; }
     }
 }

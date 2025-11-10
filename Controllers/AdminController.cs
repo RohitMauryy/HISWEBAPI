@@ -338,40 +338,7 @@ namespace HISWEBAPI.Controllers
 
 
 
-        [HttpGet("getAssignRoleForUserAuthorization")]
-        [Authorize]
-        public IActionResult GetAssignRoleForUserAuthorization([FromQuery] int branchId, [FromQuery] int typeId, [FromQuery] int userId)
-        {
-            _log.Info($"GetAssignRoleForUserAuthorization called. BranchId={branchId}, TypeId={typeId}, UserId={userId}");
-
-            if (branchId <= 0 || typeId <= 0 || userId <= 0)
-            {
-                _log.Warn("Invalid parameters for GetAssignRoleForUserAuthorization.");
-                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
-                return BadRequest(new
-                {
-                    result = false,
-                    messageType = alert.Type,
-                    message = "BranchId, TypeId, and UserId must be greater than 0"
-                });
-            }
-
-            var serviceResult = _adminRepository.GetAssignRoleForUserAuthorization(branchId, typeId, userId);
-
-            if (serviceResult.Result)
-                _log.Info($"Role authorization data fetched successfully: {serviceResult.Message}");
-            else
-                _log.Warn($"No role authorization data found: {serviceResult.Message}");
-
-            return StatusCode(serviceResult.StatusCode, new
-            {
-                result = serviceResult.Result,
-                messageType = serviceResult.MessageType,
-                message = serviceResult.Message,
-                data = serviceResult.Data
-            });
-        }
-
+      
 
         [HttpPost("saveUpdateRoleMapping")]
         [Authorize]
@@ -443,37 +410,30 @@ namespace HISWEBAPI.Controllers
             });
         }
 
-        // Add this method to AdminController.cs
-
-        [HttpGet("getAssignUserRightMapping")]
+        [HttpGet("getAssignRoleForUserAuthorization")]
         [Authorize]
-        public IActionResult GetAssignUserRightMapping(
-            [FromQuery] int branchId,
-            [FromQuery] int typeId,
-            [FromQuery] int userId,
-            [FromQuery] int roleId)
+        public IActionResult GetAssignRoleForUserAuthorization([FromQuery] int branchId, [FromQuery] int typeId, [FromQuery] int userId)
         {
-            _log.Info($"GetAssignUserRightMapping called. BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
+            _log.Info($"GetAssignRoleForUserAuthorization called. BranchId={branchId}, TypeId={typeId}, UserId={userId}");
 
-            if (branchId <= 0 || typeId <= 0 || userId <= 0 || roleId <= 0)
+            if (branchId <= 0 || typeId <= 0 || userId <= 0)
             {
-                _log.Warn("Invalid parameters for GetAssignUserRightMapping.");
+                _log.Warn("Invalid parameters for GetAssignRoleForUserAuthorization.");
                 var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
                 return BadRequest(new
                 {
                     result = false,
                     messageType = alert.Type,
-                    message = "All parameters (branchId, typeId, userId, roleId) must be greater than 0",
-                    errors = new { branchId, typeId, userId, roleId }
+                    message = "BranchId, TypeId, and UserId must be greater than 0"
                 });
             }
 
-            var serviceResult = _adminRepository.GetAssignUserRightMapping(branchId, typeId, userId, roleId);
+            var serviceResult = _adminRepository.GetAssignRoleForUserAuthorization(branchId, typeId, userId);
 
             if (serviceResult.Result)
-                _log.Info($"User right mapping fetched successfully: {serviceResult.Message}");
+                _log.Info($"Role authorization data fetched successfully: {serviceResult.Message}");
             else
-                _log.Warn($"User right mapping fetch failed: {serviceResult.Message}");
+                _log.Warn($"No role authorization data found: {serviceResult.Message}");
 
             return StatusCode(serviceResult.StatusCode, new
             {
@@ -484,7 +444,7 @@ namespace HISWEBAPI.Controllers
             });
         }
 
-
+      
         [HttpPost("saveUpdateUserRightMapping")]
         [Authorize]
         public IActionResult SaveUpdateUserRightMapping([FromBody] SaveUserRightMappingRequest request)
@@ -522,20 +482,19 @@ namespace HISWEBAPI.Controllers
             });
         }
 
-
-        [HttpGet("getAssignDashBoardUserRight")]
+        [HttpGet("getAssignUserRightMapping")]
         [Authorize]
-        public IActionResult GetAssignDashBoardUserRight(
-            [FromQuery] int branchId,
-            [FromQuery] int typeId,
-            [FromQuery] int userId,
-            [FromQuery] int roleId)
+        public IActionResult GetAssignUserRightMapping(
+          [FromQuery] int branchId,
+          [FromQuery] int typeId,
+          [FromQuery] int userId,
+          [FromQuery] int roleId)
         {
-            _log.Info($"GetAssignDashBoardUserRight called. BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
+            _log.Info($"GetAssignUserRightMapping called. BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
 
             if (branchId <= 0 || typeId <= 0 || userId <= 0 || roleId <= 0)
             {
-                _log.Warn("Invalid parameters for GetAssignDashBoardUserRight.");
+                _log.Warn("Invalid parameters for GetAssignUserRightMapping.");
                 var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
                 return BadRequest(new
                 {
@@ -546,12 +505,12 @@ namespace HISWEBAPI.Controllers
                 });
             }
 
-            var serviceResult = _adminRepository.GetAssignDashBoardUserRight(branchId, typeId, userId, roleId);
+            var serviceResult = _adminRepository.GetAssignUserRightMapping(branchId, typeId, userId, roleId);
 
             if (serviceResult.Result)
-                _log.Info($"Dashboard user right mapping fetched successfully: {serviceResult.Message}");
+                _log.Info($"User right mapping fetched successfully: {serviceResult.Message}");
             else
-                _log.Warn($"Dashboard user right mapping fetch failed: {serviceResult.Message}");
+                _log.Warn($"User right mapping fetch failed: {serviceResult.Message}");
 
             return StatusCode(serviceResult.StatusCode, new
             {
@@ -563,6 +522,9 @@ namespace HISWEBAPI.Controllers
         }
 
 
+
+
+      
         [HttpPost("saveUpdateDashBoardUserRightMapping")]
         [Authorize]
         public IActionResult SaveUpdateDashBoardUserRightMapping([FromBody] SaveDashboardUserRightMappingRequest request)
@@ -599,5 +561,85 @@ namespace HISWEBAPI.Controllers
                 data = serviceResult.Data
             });
         }
+
+
+        [HttpGet("getAssignDashBoardUserRight")]
+        [Authorize]
+        public IActionResult GetAssignDashBoardUserRight(
+              [FromQuery] int branchId,
+              [FromQuery] int typeId,
+              [FromQuery] int userId,
+              [FromQuery] int roleId)
+        {
+            _log.Info($"GetAssignDashBoardUserRight called. BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
+
+            if (branchId <= 0 || typeId <= 0 || userId <= 0 || roleId <= 0)
+            {
+                _log.Warn("Invalid parameters for GetAssignDashBoardUserRight.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "All parameters (branchId, typeId, userId, roleId) must be greater than 0",
+                    errors = new { branchId, typeId, userId, roleId }
+                });
+            }
+
+            var serviceResult = _adminRepository.GetAssignDashBoardUserRight(branchId, typeId, userId, roleId);
+
+            if (serviceResult.Result)
+                _log.Info($"Dashboard user right mapping fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"Dashboard user right mapping fetch failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+
+        [HttpPost("createUpdateNavigationTabMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateNavigationTabMaster([FromBody] NavigationTabMasterRequest request)
+        {
+            _log.Info("CreateUpdateNavigationTabMaster called.");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for navigation tab insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            var globalValues = GetGlobalValues();
+
+            var serviceResult = _adminRepository.CreateUpdateNavigationTabMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Navigation tab operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"Navigation tab operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+       
     }
 }

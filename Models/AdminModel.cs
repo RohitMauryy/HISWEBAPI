@@ -131,4 +131,8 @@
         public string? Details { get; set; }
         public int UserRightId { get; set; }
     }
+
+   
+
+   
 }

@@ -97,7 +97,7 @@ namespace HISWEBAPI.Repositories.Implementations
         {
             try
             {
-              
+
                 var dataTable = _sqlHelper.GetDataTable(
                     "S_GetRoleList",
                     CommandType.StoredProcedure,
@@ -235,7 +235,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     );
                 }
 
-               
+
 
                 if (request.userId == 0)
                 {
@@ -674,59 +674,6 @@ namespace HISWEBAPI.Repositories.Implementations
 
 
 
-        public ServiceResult<IEnumerable<UserRoleMappingModel>> GetAssignRoleForUserAuthorization(int branchId, int typeId, int userId)
-        {
-            try
-            {
-                var dataTable = _sqlHelper.GetDataTable(
-                    "S_GetAssignRoleForUserAuthorization",
-                    CommandType.StoredProcedure,
-                    new
-                    {
-                        @BranchId = branchId,
-                        @TypeId = typeId,
-                        @UserId = userId
-                    }
-                );
-
-                var roles = dataTable?.AsEnumerable().Select(row => new UserRoleMappingModel
-                {
-                    isGranted = row.Field<int>("isGranted"),
-                    RoleName = row.Field<string>("RoleName") ?? string.Empty,
-                    RoleId = row.Field<int>("RoleId")
-                }).ToList() ?? new List<UserRoleMappingModel>();
-
-                if (!roles.Any())
-                {
-                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
-                    _log.Warn($"No role authorization data found for UserId={userId}, BranchId={branchId}, TypeId={typeId}");
-                    return ServiceResult<IEnumerable<UserRoleMappingModel>>.Failure(
-                        alert.Type,
-                        alert.Message,
-                        404
-                    );
-                }
-
-                _log.Info($"Retrieved {roles.Count} role authorization records for UserId={userId}");
-
-                return ServiceResult<IEnumerable<UserRoleMappingModel>>.Success(
-                    roles,
-                    "Info",
-                    $"{roles.Count} role(s) retrieved successfully",
-                    200
-                );
-            }
-            catch (Exception ex)
-            {
-                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
-                return ServiceResult<IEnumerable<UserRoleMappingModel>>.Failure(
-                    alert.Type,
-                    alert.Message,
-                    500
-                );
-            }
-        }
 
 
 
@@ -840,54 +787,45 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-        // Add this method to AdminRepository.cs (Repositories/Implementations/AdminRepository.cs)
-
-        public ServiceResult<IEnumerable<UserRightMappingModel>> GetAssignUserRightMapping(
-            int branchId,
-            int typeId,
-            int userId,
-            int roleId)
+        public ServiceResult<IEnumerable<UserRoleMappingModel>> GetAssignRoleForUserAuthorization(int branchId, int typeId, int userId)
         {
             try
             {
                 var dataTable = _sqlHelper.GetDataTable(
-                    "S_getAssignUserRightMapping",
+                    "S_GetAssignRoleForUserAuthorization",
                     CommandType.StoredProcedure,
                     new
                     {
                         @BranchId = branchId,
-                        @typeId = typeId,
-                        @UserId = userId,
-                        @RoleId = roleId
+                        @TypeId = typeId,
+                        @UserId = userId
                     }
                 );
 
-                var userRights = dataTable?.AsEnumerable().Select(row => new UserRightMappingModel
+                var roles = dataTable?.AsEnumerable().Select(row => new UserRoleMappingModel
                 {
-                    IsGranted = row.Field<int>("isGranted"),
-                    UserRightName = row.Field<string>("UserRightName") ?? string.Empty,
-                    Description = row.Field<string>("Description") ?? string.Empty,
-                    UserRightId = row.Field<int>("UserRightId")
-                }).ToList() ?? new List<UserRightMappingModel>();
+                    isGranted = row.Field<int>("isGranted"),
+                    RoleName = row.Field<string>("RoleName") ?? string.Empty,
+                    RoleId = row.Field<int>("RoleId")
+                }).ToList() ?? new List<UserRoleMappingModel>();
 
-                if (!userRights.Any())
+                if (!roles.Any())
                 {
                     var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
-                    _log.Info($"No user rights found for BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
-
-                    return ServiceResult<IEnumerable<UserRightMappingModel>>.Failure(
+                    _log.Warn($"No role authorization data found for UserId={userId}, BranchId={branchId}, TypeId={typeId}");
+                    return ServiceResult<IEnumerable<UserRoleMappingModel>>.Failure(
                         alert.Type,
                         alert.Message,
                         404
                     );
                 }
 
-                _log.Info($"Retrieved {userRights.Count} user rights mapping records");
+                _log.Info($"Retrieved {roles.Count} role authorization records for UserId={userId}");
 
-                return ServiceResult<IEnumerable<UserRightMappingModel>>.Success(
-                    userRights,
+                return ServiceResult<IEnumerable<UserRoleMappingModel>>.Success(
+                    roles,
                     "Info",
-                    $"{userRights.Count} user right(s) retrieved successfully",
+                    $"{roles.Count} role(s) retrieved successfully",
                     200
                 );
             }
@@ -895,7 +833,7 @@ namespace HISWEBAPI.Repositories.Implementations
             {
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
                 var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
-                return ServiceResult<IEnumerable<UserRightMappingModel>>.Failure(
+                return ServiceResult<IEnumerable<UserRoleMappingModel>>.Failure(
                     alert.Type,
                     alert.Message,
                     500
@@ -1003,52 +941,52 @@ namespace HISWEBAPI.Repositories.Implementations
         }
 
 
-        public ServiceResult<IEnumerable<DashboardUserRightMappingModel>> GetAssignDashBoardUserRight(
-            int branchId,
-            int typeId,
-            int userId,
-            int roleId)
+        public ServiceResult<IEnumerable<UserRightMappingModel>> GetAssignUserRightMapping(
+         int branchId,
+         int typeId,
+         int userId,
+         int roleId)
         {
             try
             {
                 var dataTable = _sqlHelper.GetDataTable(
-                    "S_getAssignDashBoardUserRight",
+                    "S_getAssignUserRightMapping",
                     CommandType.StoredProcedure,
                     new
                     {
                         @BranchId = branchId,
-                        @TypeId = typeId,
+                        @typeId = typeId,
                         @UserId = userId,
                         @RoleId = roleId
                     }
                 );
 
-                var dashboardRights = dataTable?.AsEnumerable().Select(row => new DashboardUserRightMappingModel
+                var userRights = dataTable?.AsEnumerable().Select(row => new UserRightMappingModel
                 {
                     IsGranted = row.Field<int>("isGranted"),
                     UserRightName = row.Field<string>("UserRightName") ?? string.Empty,
-                    Details = row.Field<string>("Details") ?? string.Empty,
+                    Description = row.Field<string>("Description") ?? string.Empty,
                     UserRightId = row.Field<int>("UserRightId")
-                }).ToList() ?? new List<DashboardUserRightMappingModel>();
+                }).ToList() ?? new List<UserRightMappingModel>();
 
-                if (!dashboardRights.Any())
+                if (!userRights.Any())
                 {
                     var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
-                    _log.Info($"No dashboard user rights found for BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
+                    _log.Info($"No user rights found for BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
 
-                    return ServiceResult<IEnumerable<DashboardUserRightMappingModel>>.Failure(
+                    return ServiceResult<IEnumerable<UserRightMappingModel>>.Failure(
                         alert.Type,
                         alert.Message,
                         404
                     );
                 }
 
-                _log.Info($"Retrieved {dashboardRights.Count} dashboard user rights mapping records");
+                _log.Info($"Retrieved {userRights.Count} user rights mapping records");
 
-                return ServiceResult<IEnumerable<DashboardUserRightMappingModel>>.Success(
-                    dashboardRights,
+                return ServiceResult<IEnumerable<UserRightMappingModel>>.Success(
+                    userRights,
                     "Info",
-                    $"{dashboardRights.Count} dashboard user right(s) retrieved successfully",
+                    $"{userRights.Count} user right(s) retrieved successfully",
                     200
                 );
             }
@@ -1056,13 +994,14 @@ namespace HISWEBAPI.Repositories.Implementations
             {
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
                 var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
-                return ServiceResult<IEnumerable<DashboardUserRightMappingModel>>.Failure(
+                return ServiceResult<IEnumerable<UserRightMappingModel>>.Failure(
                     alert.Type,
                     alert.Message,
                     500
                 );
             }
         }
+
 
 
         public ServiceResult<string> SaveUpdateDashBoardUserRightMapping(SaveDashboardUserRightMappingRequest request, AllGlobalValues globalValues)
@@ -1161,5 +1100,138 @@ namespace HISWEBAPI.Repositories.Implementations
                 );
             }
         }
+
+
+
+        public ServiceResult<IEnumerable<DashboardUserRightMappingModel>> GetAssignDashBoardUserRight(
+            int branchId,
+            int typeId,
+            int userId,
+            int roleId)
+        {
+            try
+            {
+                var dataTable = _sqlHelper.GetDataTable(
+                    "S_getAssignDashBoardUserRight",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        @BranchId = branchId,
+                        @TypeId = typeId,
+                        @UserId = userId,
+                        @RoleId = roleId
+                    }
+                );
+
+                var dashboardRights = dataTable?.AsEnumerable().Select(row => new DashboardUserRightMappingModel
+                {
+                    IsGranted = row.Field<int>("isGranted"),
+                    UserRightName = row.Field<string>("UserRightName") ?? string.Empty,
+                    Details = row.Field<string>("Details") ?? string.Empty,
+                    UserRightId = row.Field<int>("UserRightId")
+                }).ToList() ?? new List<DashboardUserRightMappingModel>();
+
+                if (!dashboardRights.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No dashboard user rights found for BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
+
+                    return ServiceResult<IEnumerable<DashboardUserRightMappingModel>>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {dashboardRights.Count} dashboard user rights mapping records");
+
+                return ServiceResult<IEnumerable<DashboardUserRightMappingModel>>.Success(
+                    dashboardRights,
+                    "Info",
+                    $"{dashboardRights.Count} dashboard user right(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<DashboardUserRightMappingModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
+
+
+        public ServiceResult<NavigationTabMasterResponse> CreateUpdateNavigationTabMaster(NavigationTabMasterRequest request, AllGlobalValues globalValues)
+        {
+            try
+            {
+                SqlParameter[] parameters = new SqlParameter[]
+                {
+            new SqlParameter("@TabId", request.TabId),
+            new SqlParameter("@HospId", globalValues.hospId),
+            new SqlParameter("@TabName", request.TabName),
+            new SqlParameter("@FaIconId", request.FaIconId),
+            new SqlParameter("@IpAddress", globalValues.ipAddress),
+            new SqlParameter("@CreatedOn", globalValues.userId),
+            new SqlParameter("@Result", SqlDbType.Int) { Direction = ParameterDirection.Output }
+                };
+
+                int result = (int)_sqlHelper.RunProcedureInsert("IU_NavigationTabMaster", parameters);
+
+                if (result == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Duplicate navigation tab name attempted: {request.TabName}");
+                    return ServiceResult<NavigationTabMasterResponse>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        409
+                    );
+                }
+
+                if (request.TabId == 0)
+                {
+                    var responseData = new NavigationTabMasterResponse { TabId = result };
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
+                    _log.Info($"Navigation tab created successfully. TabId={result}");
+                    return ServiceResult<NavigationTabMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        201
+                    );
+                }
+                else
+                {
+                    var responseData = new NavigationTabMasterResponse { TabId = result };
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
+                    _log.Info($"Navigation tab updated successfully. TabId={result}");
+                    return ServiceResult<NavigationTabMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<NavigationTabMasterResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
     }
 }

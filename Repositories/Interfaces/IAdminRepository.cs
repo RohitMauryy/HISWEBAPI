@@ -23,7 +23,7 @@ namespace HISWEBAPI.Repositories.Interfaces
         ServiceResult<string> SaveUpdateUserRightMapping(SaveUserRightMappingRequest request, AllGlobalValues globalValues);
         ServiceResult<IEnumerable<DashboardUserRightMappingModel>> GetAssignDashBoardUserRight(int branchId,int typeId,int userId,int roleId);
         ServiceResult<string> SaveUpdateDashBoardUserRightMapping(SaveDashboardUserRightMappingRequest request, AllGlobalValues globalValues);
-
+        ServiceResult<NavigationTabMasterResponse> CreateUpdateNavigationTabMaster(NavigationTabMasterRequest request, AllGlobalValues globalValues);
 
 
     }
