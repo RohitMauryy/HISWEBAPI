@@ -24,7 +24,13 @@ namespace HISWEBAPI.Repositories.Interfaces
         ServiceResult<IEnumerable<DashboardUserRightMappingModel>> GetAssignDashBoardUserRight(int branchId,int typeId,int userId,int roleId);
         ServiceResult<string> SaveUpdateDashBoardUserRightMapping(SaveDashboardUserRightMappingRequest request, AllGlobalValues globalValues);
         ServiceResult<NavigationTabMasterResponse> CreateUpdateNavigationTabMaster(NavigationTabMasterRequest request, AllGlobalValues globalValues);
-
+        ServiceResult<IEnumerable<NavigationTabMasterModel>> GetNavigationTabMaster();
+        ServiceResult<NavigationSubMenuMasterResponse> CreateUpdateNavigationSubMenuMaster(NavigationSubMenuMasterRequest request,AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<NavigationSubMenuMasterModel>> GetNavigationSubMenuMaster();
+        ServiceResult<string> SaveUpdateRoleWiseMenuMapping(SaveRoleWiseMenuMappingRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<RoleWiseMenuMappingModel>> GetRoleWiseMenuMapping(int branchId, int roleId);
+        ServiceResult<string> SaveUpdateUserMenuMaster(SaveUserMenuMasterRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<UserWiseMenuMasterModel>> GetUserWiseMenuMaster(int branchId, int typeId, int userId, int roleId);
 
     }
 }

@@ -165,13 +165,8 @@ namespace HISWEBAPI.Repositories.Implementations
                     {
                         Id = row.Field<int>("Id"),
                         ConfigKey = row.Field<string>("ConfigKey"),
-                        ConfigJson = row.Field<string>("ConfigJson"),
-                        IsActive = row.Field<bool>("IsActive"),
-                        CreatedBy = row.Field<int?>("CreatedBy"),
-                        CreatedOn = row.Field<DateTime>("CreatedOn"),
-                        LastModifiedBy = row.Field<int?>("LastModifiedBy"),
-                        LastModifiedOn = row.Field<DateTime?>("LastModifiedOn"),
-                        IpAddress = row.Field<string>("IpAddress")
+                        ConfigJson = row.Field<string>("ConfigJson")
+                       
                     }).ToList() ?? new List<PageConfigResponse>();
 
                     // Store ALL configurations in cache (no expiration)

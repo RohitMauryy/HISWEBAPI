@@ -23,12 +23,7 @@ namespace HISWEBAPI.DTO
         public int Id { get; set; }
         public string ConfigKey { get; set; }
         public string ConfigJson { get; set; }
-        public bool IsActive { get; set; }
-        public int? CreatedBy { get; set; }
-        public DateTime CreatedOn { get; set; }
-        public int? LastModifiedBy { get; set; }
-        public DateTime? LastModifiedOn { get; set; }
-        public string IpAddress { get; set; }
+       
     }
 
     
@@ -259,4 +254,118 @@ namespace HISWEBAPI.DTO
     {
         public int TabId { get; set; }
     }
+
+
+
+    public class NavigationSubMenuMasterRequest
+    {
+        public int SubMenuId { get; set; } = 0;
+
+        [Required(ErrorMessage = "TabId is required")]
+        public int TabId { get; set; }
+
+        [Required(ErrorMessage = "Sub menu name is required")]
+        [StringLength(512, ErrorMessage = "Sub menu name cannot exceed 512 characters")]
+        public string SubMenuName { get; set; }
+
+        [Required(ErrorMessage = "URL is required")]
+        public string URL { get; set; }
+
+        public bool IsActive { get; set; } = true;
+    }
+
+    public class NavigationSubMenuMasterResponse
+    {
+        public int SubMenuId { get; set; }
+    }
+
+
+
+    public class RoleWiseMenuMappingRequest
+    {
+        [Required(ErrorMessage = "RoleId is required")]
+        public int RoleId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "SubMenuId is required")]
+        public int SubMenuId { get; set; }
+    }
+
+    public class SaveRoleWiseMenuMappingRequest
+    {
+      
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "RoleId is required")]
+        public int RoleId { get; set; }
+        public List<RoleWiseMenuMappingRequest> MenuMappings { get; set; } = new List<RoleWiseMenuMappingRequest>();
+    }
+
+    public class GetRoleWiseMenuMappingRequest
+    {
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+       
+        [Required(ErrorMessage = "RoleId is required")]
+        public int RoleId { get; set; }
+    }
+
+
+    public class UserMenuMasterRequest
+    {
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
+
+        [Required(ErrorMessage = "RoleId is required")]
+        public int RoleId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "SubMenuId is required")]
+        public int SubMenuId { get; set; }
+    }
+
+    public class SaveUserMenuMasterRequest
+    {
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "RoleId is required")]
+        public int RoleId { get; set; }
+
+        [Required(ErrorMessage = "IsFirst is required")]
+        public int IsFirst { get; set; }
+
+        public List<UserMenuMasterRequest> UserMenus { get; set; } = new List<UserMenuMasterRequest>();
+    }
+
+    public class GetUserWiseMenuMasterRequest
+    {
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
+
+        [Required(ErrorMessage = "RoleId is required")]
+        public int RoleId { get; set; }
+    }
+
 }

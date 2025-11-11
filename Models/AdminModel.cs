@@ -133,7 +133,48 @@
         public int UserRightId { get; set; }
     }
 
-   
 
-   
+    public class NavigationTabMasterModel
+    {
+        public int TabId { get; set; }
+        public required string TabName { get; set; }
+        public int IsActive { get; set; }
+      
+    }
+
+    public class NavigationSubMenuMasterModel
+    {
+        public int SubMenuId { get; set; }
+        public int TabId { get; set; }
+        public string SubMenuName { get; set; }
+        public string URL { get; set; }
+        public int IsActive { get; set; }
+        public string CreatedBy { get; set; }
+        public string CreatedOn { get; set; }
+        public string LastModifiedBy { get; set; }
+        public string LastModifiedOn { get; set; }
+        public string IpAddress { get; set; }
+    }
+
+    public class RoleWiseMenuMappingModel
+    {
+        public int IsGranted { get; set; }
+        public int SubMenuId { get; set; }
+        public int TabId { get; set; }
+        public required string SubMenuName { get; set; }
+        public required string TabName { get; set; }
+        public int IsActive { get; set; }
+    }
+
+
+    public class UserWiseMenuMasterModel
+    {
+        public int IsGranted { get; set; }
+        public int SubMenuId { get; set; }
+        public int TabId { get; set; }
+        public required string SubMenuName { get; set; }
+        public required string TabName { get; set; }
+        public int IsActive { get; set; }
+    }
+
 }

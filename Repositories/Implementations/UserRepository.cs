@@ -13,6 +13,8 @@ using HISWEBAPI.Services;
 using HISWEBAPI.Utilities;
 using HISWEBAPI.Exceptions;
 using HISWEBAPI.Services.Interfaces;
+using HISWEBAPI.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace HISWEBAPI.Repositories.Implementations
 {
@@ -23,6 +25,7 @@ namespace HISWEBAPI.Repositories.Implementations
         private readonly ISmsService _smsService;
         private readonly IEmailService _emailService;
         private readonly IJwtService _jwtService;
+        private readonly JwtSettings _jwtSettings;
         private static readonly ILog _log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         public UserRepository(
@@ -30,13 +33,15 @@ namespace HISWEBAPI.Repositories.Implementations
             IResponseMessageService messageService,
             ISmsService smsService,
             IEmailService emailService,
-            IJwtService jwtService)
+            IJwtService jwtService,
+            IOptions<JwtSettings> jwtSettings)
         {
             _sqlHelper = sqlHelper;
             _messageService = messageService;
             _smsService = smsService;
             _emailService = emailService;
             _jwtService = jwtService;
+            _jwtSettings = jwtSettings.Value;
         }
 
         public ServiceResult<UserLoginResponseData> UserLogin(UserLoginRequest request)
@@ -99,7 +104,8 @@ namespace HISWEBAPI.Repositories.Implementations
                     branchId = branchId,
                     accessToken = accessToken,
                     refreshToken = refreshToken,
-                    tokenType = "Bearer"
+                    tokenType = "Bearer",
+                    expiresIn = _jwtSettings.ExpiryMinutes * 60 // Convert minutes to seconds
                 };
 
                 var alert1 = _messageService.GetMessageAndTypeByAlertCode("LOGIN_SUCCESS");
@@ -181,7 +187,8 @@ namespace HISWEBAPI.Repositories.Implementations
                 {
                     accessToken = newAccessToken,
                     refreshToken = newRefreshToken,
-                    tokenType = "Bearer"
+                    tokenType = "Bearer",
+                    expiresIn = _jwtSettings.ExpiryMinutes * 60 // Convert minutes to seconds
                 };
 
                 var alert1 = _messageService.GetMessageAndTypeByAlertCode("TOKEN_REFRESHED");

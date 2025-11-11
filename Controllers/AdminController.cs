@@ -31,7 +31,7 @@ namespace HISWEBAPI.Controllers
             _messageService = messageService;
         }
 
-       
+
 
         [HttpPost("createUpdateRoleMaster")]
         [Authorize]
@@ -326,7 +326,7 @@ namespace HISWEBAPI.Controllers
 
 
 
-      
+
 
         [HttpPost("saveUpdateRoleMapping")]
         [Authorize]
@@ -432,7 +432,7 @@ namespace HISWEBAPI.Controllers
             });
         }
 
-      
+
         [HttpPost("saveUpdateUserRightMapping")]
         [Authorize]
         public IActionResult SaveUpdateUserRightMapping([FromBody] SaveUserRightMappingRequest request)
@@ -512,7 +512,7 @@ namespace HISWEBAPI.Controllers
 
 
 
-      
+
         [HttpPost("saveUpdateDashBoardUserRightMapping")]
         [Authorize]
         public IActionResult SaveUpdateDashBoardUserRightMapping([FromBody] SaveDashboardUserRightMappingRequest request)
@@ -628,6 +628,318 @@ namespace HISWEBAPI.Controllers
             });
         }
 
-       
+        [HttpGet("getNavigationTabMaster")]
+        [Authorize]
+        public IActionResult GetNavigationTabMaster()
+        {
+            _log.Info("GetNavigationTabMaster endpoint called.");
+
+            var serviceResult = _adminRepository.GetNavigationTabMaster();
+
+            if (serviceResult.Result)
+                _log.Info($"Navigation tabs fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"No navigation tabs found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+
+        [HttpPost("createUpdateNavigationSubMenuMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateNavigationSubMenuMaster([FromBody] NavigationSubMenuMasterRequest request)
+        {
+            _log.Info($"CreateUpdateNavigationSubMenuMaster called. TabId={request.TabId}, SubMenuName={request.SubMenuName}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for navigation sub menu insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+
+            var serviceResult = _adminRepository.CreateUpdateNavigationSubMenuMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Navigation sub menu operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"Navigation sub menu operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getNavigationSubMenuMaster")]
+        [Authorize]
+        public IActionResult GetNavigationSubMenuMaster()
+        {
+            _log.Info($"GetNavigationSubMenuMaster called");
+
+            var serviceResult = _adminRepository.GetNavigationSubMenuMaster();
+
+            if (serviceResult.Result)
+                _log.Info($"Navigation sub menus fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"Navigation sub menus fetch failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+
+
+        [HttpPost("saveUpdateRoleWiseMenuMapping")]
+        [Authorize]
+        public IActionResult SaveUpdateRoleWiseMenuMapping([FromBody] SaveRoleWiseMenuMappingRequest request)
+        {
+            _log.Info($"SaveUpdateRoleWiseMenuMapping called.  BranchId={request.BranchId}, RoleId={request.RoleId}, MenuMappings Count={request.MenuMappings.Count}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for SaveUpdateRoleWiseMenuMapping.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Validate that all items (if any exist) have the same  branchId, and roleId as the parent request
+            if (request.MenuMappings != null && request.MenuMappings.Count > 0)
+            {
+                bool isConsistent = request.MenuMappings.All(x =>
+                    x.BranchId == request.BranchId &&
+                    x.RoleId == request.RoleId);
+
+                if (!isConsistent)
+                {
+                    _log.Warn("Inconsistent  branchId, or roleId in menu mapping list.");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    return BadRequest(new
+                    {
+                        result = false,
+                        messageType = alert.Type,
+                        message = "All menu mapping items must have the same  branchId, and roleId as the request"
+                    });
+                }
+
+                _log.Info($"Saving role-wise menu mapping for BranchId={request.BranchId}, RoleId={request.RoleId}, Count={request.MenuMappings.Count}");
+            }
+            else
+            {
+                _log.Info($"Removing all menu mappings for BranchId={request.BranchId}, RoleId={request.RoleId}");
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+
+            var serviceResult = _adminRepository.SaveUpdateRoleWiseMenuMapping(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Role-wise menu mapping saved successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"Role-wise menu mapping save failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getRoleWiseMenuMapping")]
+        [Authorize]
+        public IActionResult GetRoleWiseMenuMapping(
+          [FromQuery] int branchId,
+          [FromQuery] int roleId)
+        {
+            _log.Info($"GetRoleWiseMenuMapping called. BranchId={branchId}, RoleId={roleId}");
+
+            if (branchId <= 0 || roleId <= 0)
+            {
+                _log.Warn("Invalid parameters for GetRoleWiseMenuMapping.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "All parameters (branchId, roleId) must be greater than 0",
+                    errors = new { branchId, roleId }
+                });
+            }
+
+            var serviceResult = _adminRepository.GetRoleWiseMenuMapping(branchId, roleId);
+
+            if (serviceResult.Result)
+                _log.Info($"Role-wise menu mapping fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"Role-wise menu mapping fetch failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+
+
+
+
+        [HttpPost("saveUpdateUserMenuMaster")]
+        [Authorize]
+        public IActionResult SaveUpdateUserMenuMaster([FromBody] SaveUserMenuMasterRequest request)
+        {
+            _log.Info($"SaveUpdateUserMenuMaster called. TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}, RoleId={request.RoleId}, IsFirst={request.IsFirst}, UserMenus Count={request.UserMenus.Count}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for SaveUpdateUserMenuMaster.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Validate IsFirst parameter
+            if (request.IsFirst != 0 && request.IsFirst != 1)
+            {
+                _log.Warn($"Invalid IsFirst parameter: {request.IsFirst}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsFirst must be either 0 or 1",
+                    errors = new { IsFirst = request.IsFirst }
+                });
+            }
+
+            // Validate that all items (if any exist) have the same typeId, userId, branchId, and roleId as the parent request
+            if (request.UserMenus != null && request.UserMenus.Count > 0)
+            {
+                bool isConsistent = request.UserMenus.All(x =>
+                    x.TypeId == request.TypeId &&
+                    x.UserId == request.UserId &&
+                    x.BranchId == request.BranchId &&
+                    x.RoleId == request.RoleId);
+
+                if (!isConsistent)
+                {
+                    _log.Warn("Inconsistent typeId, userId, branchId, or roleId in user menu list.");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    return BadRequest(new
+                    {
+                        result = false,
+                        messageType = alert.Type,
+                        message = "All user menu items must have the same typeId, userId, branchId, and roleId as the request"
+                    });
+                }
+
+                _log.Info($"Saving user menu for TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}, RoleId={request.RoleId}, Count={request.UserMenus.Count}");
+            }
+            else
+            {
+                if (request.IsFirst == 1)
+                {
+                    _log.Info($"Removing all user menus for TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}, RoleId={request.RoleId}");
+                }
+                else
+                {
+                    _log.Info($"No user menus to save for TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}, RoleId={request.RoleId}");
+                }
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+
+            var serviceResult = _adminRepository.SaveUpdateUserMenuMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"User menu master saved successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"User menu master save failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getUserWiseMenuMaster")]
+        [Authorize]
+        public IActionResult GetUserWiseMenuMaster(
+        [FromQuery] int branchId,
+        [FromQuery] int typeId,
+        [FromQuery] int userId,
+        [FromQuery] int roleId)
+        {
+            _log.Info($"GetUserWiseMenuMaster called. BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
+
+            if (branchId <= 0 || typeId <= 0 || userId <= 0 || roleId <= 0)
+            {
+                _log.Warn("Invalid parameters for GetUserWiseMenuMaster.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "All parameters (branchId, typeId, userId, roleId) must be greater than 0",
+                    errors = new { branchId, typeId, userId, roleId }
+                });
+            }
+
+            var serviceResult = _adminRepository.GetUserWiseMenuMaster(branchId, typeId, userId, roleId);
+
+            if (serviceResult.Result)
+                _log.Info($"User-wise menu (granted + remaining) fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"User-wise menu fetch failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
     }
 }

@@ -13,6 +13,7 @@ using System.Reflection;
 using log4net;
 using Microsoft.Data.SqlClient;
 using HISWEBAPI.Utilities;
+using Microsoft.Extensions.Caching.Distributed;
 
 namespace HISWEBAPI.Repositories.Implementations
 {
@@ -20,14 +21,18 @@ namespace HISWEBAPI.Repositories.Implementations
     {
         private readonly ICustomSqlHelper _sqlHelper;
         private readonly IResponseMessageService _messageService;
+        private readonly IDistributedCache _distributedCache;
         private static readonly ILog _log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         public AdminRepository(
             ICustomSqlHelper sqlHelper,
-            IResponseMessageService messageService)
+            IResponseMessageService messageService,
+            IDistributedCache distributedCache)
         {
             _sqlHelper = sqlHelper;
             _messageService = messageService;
+            _distributedCache = distributedCache;
+
         }
 
         public ServiceResult<string> CreateUpdateRoleMaster(RoleMasterRequest request, AllGlobalValues globalValues)
@@ -1225,6 +1230,570 @@ namespace HISWEBAPI.Repositories.Implementations
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
                 var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
                 return ServiceResult<NavigationTabMasterResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
+        public ServiceResult<IEnumerable<NavigationTabMasterModel>> GetNavigationTabMaster()
+        {
+            try
+            {
+                _log.Info("GetNavigationTabMaster called.");
+
+                // Define cache key inside the method
+                string cacheKey = "_NavigationTabMaster_All";
+
+                // Try to get data from Redis cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<NavigationTabMasterModel> navigationTabs;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"NavigationTabMaster data retrieved from cache. Key={cacheKey}");
+                    navigationTabs = System.Text.Json.JsonSerializer.Deserialize<List<NavigationTabMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"NavigationTabMaster cache miss. Fetching data from database. Key={cacheKey}");
+
+                    // Fetch data from database using stored procedure
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetNavigationTabMaster",
+                        CommandType.StoredProcedure
+                    );
+
+                    navigationTabs = dataTable?.AsEnumerable().Select(row => new NavigationTabMasterModel
+                    {
+                        TabId = row.Field<int>("TabId"),
+                        TabName = row.Field<string>("TabName") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive")
+                    }).ToList() ?? new List<NavigationTabMasterModel>();
+
+                    // Store data in Redis cache with unlimited time span (no expiration)
+                    if (navigationTabs.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(navigationTabs);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"NavigationTabMaster data cached permanently. Key={cacheKey}, Count={navigationTabs.Count}");
+                    }
+                }
+
+                if (!navigationTabs.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info("No navigation tabs found");
+                    return ServiceResult<IEnumerable<NavigationTabMasterModel>>.Failure(
+                        alert.Type,
+                        "No navigation tabs found",
+                        404
+                    );
+                }
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_COMPLETED_SUCCESSFULLY");
+                _log.Info($"Retrieved {navigationTabs.Count} navigation tab(s) from cache");
+
+                return ServiceResult<IEnumerable<NavigationTabMasterModel>>.Success(
+                    navigationTabs,
+                    alert1.Type,
+                    $"{navigationTabs.Count} navigation tab(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<NavigationTabMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
+        public ServiceResult<NavigationSubMenuMasterResponse> CreateUpdateNavigationSubMenuMaster(
+            NavigationSubMenuMasterRequest request,
+            AllGlobalValues globalValues)
+        {
+            try
+            {
+                SqlParameter[] parameters = new SqlParameter[]
+                {
+            new SqlParameter("@SubMenuId", request.SubMenuId),
+            new SqlParameter("@TabId", request.TabId),
+            new SqlParameter("@SubMenuName", request.SubMenuName),
+            new SqlParameter("@HospId", globalValues.hospId),
+            new SqlParameter("@URL", request.URL ?? (object)DBNull.Value),
+            new SqlParameter("@IpAddress", globalValues.ipAddress),
+            new SqlParameter("@CreatedOn", globalValues.userId),
+            new SqlParameter("@IsActive", request.IsActive ? 1 : 0),
+            new SqlParameter("@Result", SqlDbType.Int) { Direction = ParameterDirection.Output }
+                };
+
+                int result = (int)_sqlHelper.RunProcedureInsert("IU_NavigationSubMenuMaster", parameters);
+
+                if (result == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Duplicate navigation sub menu name attempted: {request.SubMenuName}");
+                    return ServiceResult<NavigationSubMenuMasterResponse>.Failure(
+                        alert.Type,
+                        $"Sub menu '{request.SubMenuName}' already exists",
+                        409
+                    );
+                }
+
+                if (request.SubMenuId == 0)
+                {
+                    var responseData = new NavigationSubMenuMasterResponse { SubMenuId = result };
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
+                    _log.Info($"Navigation sub menu created successfully. SubMenuId={result}");
+                    return ServiceResult<NavigationSubMenuMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        201
+                    );
+                }
+                else
+                {
+                    var responseData = new NavigationSubMenuMasterResponse { SubMenuId = result };
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
+                    _log.Info($"Navigation sub menu updated successfully. SubMenuId={result}");
+                    return ServiceResult<NavigationSubMenuMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<NavigationSubMenuMasterResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<NavigationSubMenuMasterModel>> GetNavigationSubMenuMaster()
+        {
+            try
+            {
+                _log.Info($"GetNavigationSubMenuMaster called");
+
+                var dataTable = _sqlHelper.GetDataTable(
+                    "S_GetNavigationSubMenuMaster",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                       
+                    }
+                );
+
+                var subMenus = dataTable?.AsEnumerable().Select(row => new NavigationSubMenuMasterModel
+                {
+                    SubMenuId = row.Field<int>("SubMenuId"),
+                    TabId = row.Field<int>("TabId"),
+                    SubMenuName = row.Field<string>("SubMenuName") ?? string.Empty,
+                    URL = row.Field<string>("URL") ?? string.Empty,
+                    IsActive = row.Field<int>("IsActive"),
+                    CreatedBy = row.Field<string>("CreatedBy") ?? string.Empty,
+                    CreatedOn = row.Field<string>("CreatedOn") ?? string.Empty,
+                    LastModifiedBy = row.Field<string>("LastModifiedBy") ?? string.Empty,
+                    LastModifiedOn = row.Field<string>("LastModifiedOn") ?? string.Empty,
+                    IpAddress = row.Field<string>("IpAddress") ?? string.Empty
+                }).ToList() ?? new List<NavigationSubMenuMasterModel>();
+
+                if (!subMenus.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No navigation sub menus found");
+
+                    return ServiceResult<IEnumerable<NavigationSubMenuMasterModel>>.Failure(
+                        alert.Type,
+                        "No navigation sub menus found",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {subMenus.Count} navigation sub menu(s)");
+
+                return ServiceResult<IEnumerable<NavigationSubMenuMasterModel>>.Success(
+                    subMenus,
+                    "Info",
+                    $"{subMenus.Count} navigation sub menu(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<NavigationSubMenuMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
+
+       
+
+        public ServiceResult<string> SaveUpdateRoleWiseMenuMapping(
+            SaveRoleWiseMenuMappingRequest request,
+            AllGlobalValues globalValues)
+        {
+            try
+            {
+                // Delete existing role-wise menu mappings
+                var deleteResult = _sqlHelper.DML("D_DeleteRoleWiseMenuMappingMaster", CommandType.StoredProcedure, new
+                {
+                    @BranchId = request.BranchId,
+                    @RoleId = request.RoleId
+                },
+                new
+                {
+                    result = 0
+                });
+
+                _log.Info($"Deleted existing role-wise menu mappings for BranchId={request.BranchId}, RoleId={request.RoleId}");
+
+                // If MenuMappings list is empty or null, only delete operation was needed
+                if (request.MenuMappings == null || !request.MenuMappings.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_DELETED_SUCCESSFULLY");
+                    _log.Info("Role-wise menu mappings deleted successfully. No new mappings to insert.");
+
+                    return ServiceResult<string>.Success(
+                        "Role-wise menu mappings deleted successfully",
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+
+                // If MenuMappings list has items with SubMenuId = 0, skip them
+                var validMenuMappings = request.MenuMappings.Where(mm => mm.SubMenuId != 0).ToList();
+
+                if (!validMenuMappings.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_DELETED_SUCCESSFULLY");
+                    _log.Info("Role-wise menu mappings deleted successfully. No valid mappings to insert.");
+
+                    return ServiceResult<string>.Success(
+                        "Role-wise menu mappings deleted successfully",
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+
+                // Insert new role-wise menu mappings
+                int insertedCount = 0;
+                foreach (var menuMapping in validMenuMappings)
+                {
+                    var result = _sqlHelper.DML("IU_RoleWiseMenuMappingMaster", CommandType.StoredProcedure, new
+                    {
+                        @RoleId = menuMapping.RoleId,
+                        @BranchId = menuMapping.BranchId,
+                        @SubMenuId = menuMapping.SubMenuId,
+                        @HospId = globalValues.hospId,
+                        @CreatedBy = globalValues.userId,
+                        @IpAddress = globalValues.ipAddress
+                    },
+                    new
+                    {
+                        result = 0
+                    });
+
+                    if (result > 0)
+                    {
+                        insertedCount++;
+                    }
+                }
+
+                _log.Info($"Inserted {insertedCount} role-wise menu mappings for RoleId={request.RoleId}");
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
+                return ServiceResult<string>.Success(
+                    $"Role-wise menu mappings updated successfully. {insertedCount} mapping(s) assigned.",
+                    alert1.Type,
+                    alert1.Message,
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<string>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<RoleWiseMenuMappingModel>> GetRoleWiseMenuMapping(
+           int branchId,
+           int roleId)
+        {
+            try
+            {
+                var dataTable = _sqlHelper.GetDataTable(
+                    "S_RoleWiseMenuMappingMaster",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        @BranchId = branchId,
+                        @RoleId = roleId
+                    }
+                );
+
+                var menuMappings = dataTable?.AsEnumerable().Select(row => new RoleWiseMenuMappingModel
+                {
+                    IsGranted = row.Field<int>("isGranted"),
+                    SubMenuId = row.Field<int>("SubMenuId"),
+                    TabId = row.Field<int>("TabId"),
+                    SubMenuName = row.Field<string>("SubMenuName") ?? string.Empty,
+                    TabName = row.Field<string>("TabName") ?? string.Empty,
+                    IsActive = row.Field<int>("IsActive")
+                }).ToList() ?? new List<RoleWiseMenuMappingModel>();
+
+                if (!menuMappings.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No role-wise menu mapping found for BranchId={branchId}, RoleId={roleId}");
+
+                    return ServiceResult<IEnumerable<RoleWiseMenuMappingModel>>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {menuMappings.Count} role-wise menu mapping records");
+
+                return ServiceResult<IEnumerable<RoleWiseMenuMappingModel>>.Success(
+                    menuMappings,
+                    "Info",
+                    $"{menuMappings.Count} menu mapping(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<RoleWiseMenuMappingModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
+      
+        public ServiceResult<string> SaveUpdateUserMenuMaster(
+            SaveUserMenuMasterRequest request,
+            AllGlobalValues globalValues)
+        {
+            try
+            {
+                // Delete existing user menu mappings if IsFirst = 1
+                if (request.IsFirst == 1)
+                {
+                    var deleteResult = _sqlHelper.DML("D_DeleteUserMenuMaster", CommandType.StoredProcedure, new
+                    {
+                        @TypeId = request.TypeId,
+                        @UserId = request.UserId,
+                        @BranchId = request.BranchId,
+                        @RoleId = request.RoleId
+                    },
+                    new
+                    {
+                        result = 0
+                    });
+
+                    _log.Info($"Deleted existing user menu for TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}, RoleId={request.RoleId}");
+                }
+
+                // If UserMenus list is empty or null, only delete operation was needed
+                if (request.UserMenus == null || !request.UserMenus.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
+                    );
+                    _log.Info("User menu operation completed. No new menus to insert.");
+
+                    return ServiceResult<string>.Success(
+                        request.IsFirst == 1 ? "User menus deleted successfully" : "No user menus to save",
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+
+                // Filter out items with SubMenuId = 0
+                var validUserMenus = request.UserMenus.Where(um => um.SubMenuId != 0).ToList();
+
+                if (!validUserMenus.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
+                    );
+                    _log.Info("User menu operation completed. No valid menus to insert.");
+
+                    return ServiceResult<string>.Success(
+                        request.IsFirst == 1 ? "User menus deleted successfully" : "No valid user menus to save",
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+
+                // Validate consistency of all items with parent request
+                bool isConsistent = validUserMenus.All(x =>
+                    x.TypeId == request.TypeId &&
+                    x.UserId == request.UserId &&
+                    x.BranchId == request.BranchId &&
+                    x.RoleId == request.RoleId);
+
+                if (!isConsistent)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    _log.Warn("Inconsistent TypeId, UserId, BranchId, or RoleId in user menu list.");
+
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        "All user menu items must have the same TypeId, UserId, BranchId, and RoleId as the request",
+                        400
+                    );
+                }
+
+                // Insert new user menu mappings
+                int insertedCount = 0;
+                foreach (var userMenu in validUserMenus)
+                {
+                    var result = _sqlHelper.DML("IU_UserMenuMaster", CommandType.StoredProcedure, new
+                    {
+                        @TypeId = userMenu.TypeId,
+                        @UserId = userMenu.UserId,
+                        @RoleId = userMenu.RoleId,
+                        @BranchId = userMenu.BranchId,
+                        @SubMenuId = userMenu.SubMenuId,
+                        @HospId = globalValues.hospId,
+                        @CreatedBy = globalValues.userId,
+                        @IpAddress = globalValues.ipAddress
+                    },
+                    new
+                    {
+                        result = 0
+                    });
+
+                    if (result > 0)
+                    {
+                        insertedCount++;
+                    }
+                }
+
+                _log.Info($"Inserted {insertedCount} user menu records for UserId={request.UserId}");
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
+                return ServiceResult<string>.Success(
+                    $"User menu updated successfully. {insertedCount} menu(s) assigned.",
+                    alert1.Type,
+                    alert1.Message,
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<string>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<UserWiseMenuMasterModel>> GetUserWiseMenuMaster(
+     int branchId,
+     int typeId,
+     int userId,
+     int roleId)
+        {
+            try
+            {
+                var dataTable = _sqlHelper.GetDataTable(
+                    "S_UserWiseMenuMaster",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        @BranchId = branchId,
+                        @TypeId = typeId,
+                        @UserId = userId,
+                        @RoleId = roleId
+                    }
+                );
+
+                var userMenus = dataTable?.AsEnumerable().Select(row => new UserWiseMenuMasterModel
+                {
+                    IsGranted = row.Field<int>("isGranted"),
+                    SubMenuId = row.Field<int>("SubMenuId"),
+                    TabId = row.Field<int>("TabId"),
+                    SubMenuName = row.Field<string>("SubMenuName") ?? string.Empty,
+                    TabName = row.Field<string>("TabName") ?? string.Empty,
+                    IsActive = row.Field<int>("IsActive")
+                }).ToList() ?? new List<UserWiseMenuMasterModel>();
+
+                if (!userMenus.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No user-wise menu found for BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
+
+                    return ServiceResult<IEnumerable<UserWiseMenuMasterModel>>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {userMenus.Count} user-wise menu records (Granted + Remaining)");
+
+                return ServiceResult<IEnumerable<UserWiseMenuMasterModel>>.Success(
+                    userMenus,
+                    "Info",
+                    $"{userMenus.Count} user-wise menu(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<UserWiseMenuMasterModel>>.Failure(
                     alert.Type,
                     alert.Message,
                     500
