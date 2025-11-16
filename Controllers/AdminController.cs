@@ -71,15 +71,67 @@ namespace HISWEBAPI.Controllers
 
 
 
-        [HttpGet("roleMasterList")]
+        [HttpPatch("updateRoleMasterStatus")]
         [Authorize]
-        public IActionResult RoleMasterList()
+        public IActionResult UpdateRoleMasterStatus([FromQuery] int roleId, [FromQuery] int isActive)
         {
-            _log.Info("RoleMasterList called.");
-            var serviceResult = _adminRepository.RoleMasterList();
+            _log.Info($"UpdateRoleMasterStatus called. RoleId={roleId}, IsActive={isActive}");
+
+            if (roleId <= 0)
+            {
+                _log.Warn("Invalid RoleId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "RoleId must be greater than 0",
+                    errors = new { roleId }
+                });
+            }
+
+            if (isActive != 0 && isActive != 1)
+            {
+                _log.Warn("Invalid IsActive value provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 or 1",
+                    errors = new { isActive }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.UpdateRoleMasterStatus(roleId, isActive, globalValues);
 
             if (serviceResult.Result)
-                _log.Info($"Roles fetched successfully: {serviceResult.Message}");
+                _log.Info($"Role status updated successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"Role status update failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+
+      
+        [HttpGet("roleMasterList")]
+        [Authorize]
+        public IActionResult RoleMasterList([FromQuery] int? roleId = null)
+        {
+            _log.Info($"RoleMasterList called. RoleId={roleId?.ToString() ?? "All"}");
+
+            var serviceResult = _adminRepository.RoleMasterList(roleId);
+
+            if (serviceResult.Result)
+                _log.Info($"Roles fetched successfully from cache: {serviceResult.Message}");
             else
                 _log.Warn($"No roles found: {serviceResult.Message}");
 
@@ -149,17 +201,46 @@ namespace HISWEBAPI.Controllers
             });
         }
 
-
-        [HttpGet("userMasterList")]
+        [HttpPatch("updateUserMasterStatus")]
         [Authorize]
-        public IActionResult UserMasterList()
+        public IActionResult UpdateUserMasterStatus([FromQuery] int userId, [FromQuery] int isActive)
         {
-            _log.Info("UserMasterList called.");
-            var serviceResult = _adminRepository.UserMasterList();
+            _log.Info($"UpdateUserMasterStatus called. UserId={userId}, IsActive={isActive}");
+
+            if (userId <= 0)
+            {
+                _log.Warn("Invalid UserId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "UserId must be greater than 0",
+                    errors = new { userId }
+                });
+            }
+
+            if (isActive != 0 && isActive != 1)
+            {
+                _log.Warn("Invalid IsActive value provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 or 1",
+                    errors = new { isActive }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.UpdateUserMasterStatus(userId, isActive, globalValues);
+
             if (serviceResult.Result)
-                _log.Info($"Users fetched successfully: {serviceResult.Message}");
+                _log.Info($"User status updated successfully: {serviceResult.Message}");
             else
-                _log.Warn($"No users found: {serviceResult.Message}");
+                _log.Warn($"User status update failed: {serviceResult.Message}");
+
             return StatusCode(serviceResult.StatusCode, new
             {
                 result = serviceResult.Result,
@@ -169,6 +250,28 @@ namespace HISWEBAPI.Controllers
             });
         }
 
+
+        [HttpGet("userMasterList")]
+        [Authorize]
+        public IActionResult UserMasterList([FromQuery] int? userId = null)
+        {
+            _log.Info($"UserMasterList called. UserId={userId?.ToString() ?? "All"}");
+
+            var serviceResult = _adminRepository.UserMasterList(userId);
+
+            if (serviceResult.Result)
+                _log.Info($"Users fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No users found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
 
         [HttpPost("createUpdateUserDepartment")]
         [Authorize]
@@ -716,7 +819,7 @@ namespace HISWEBAPI.Controllers
         [Authorize]
         public IActionResult SaveUpdateRoleWiseMenuMapping([FromBody] SaveRoleWiseMenuMappingRequest request)
         {
-            _log.Info($"SaveUpdateRoleWiseMenuMapping called.  BranchId={request.BranchId}, RoleId={request.RoleId}, MenuMappings Count={request.MenuMappings.Count}");
+            _log.Info($"SaveUpdateRoleWiseMenuMapping called. BranchId={request.BranchId}, RoleId={request.RoleId}, IsFirst={request.IsFirst}, MenuMappings Count={request.MenuMappings.Count}");
 
             if (!ModelState.IsValid)
             {
@@ -731,7 +834,21 @@ namespace HISWEBAPI.Controllers
                 });
             }
 
-            // Validate that all items (if any exist) have the same  branchId, and roleId as the parent request
+            // Validate IsFirst parameter
+            if (request.IsFirst != 0 && request.IsFirst != 1)
+            {
+                _log.Warn($"Invalid IsFirst parameter: {request.IsFirst}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsFirst must be either 0 or 1",
+                    errors = new { IsFirst = request.IsFirst }
+                });
+            }
+
+            // Validate that all items (if any exist) have the same branchId and roleId as the parent request
             if (request.MenuMappings != null && request.MenuMappings.Count > 0)
             {
                 bool isConsistent = request.MenuMappings.All(x =>
@@ -740,13 +857,13 @@ namespace HISWEBAPI.Controllers
 
                 if (!isConsistent)
                 {
-                    _log.Warn("Inconsistent  branchId, or roleId in menu mapping list.");
+                    _log.Warn("Inconsistent branchId or roleId in menu mapping list.");
                     var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
                     return BadRequest(new
                     {
                         result = false,
                         messageType = alert.Type,
-                        message = "All menu mapping items must have the same  branchId, and roleId as the request"
+                        message = "All menu mapping items must have the same branchId and roleId as the request"
                     });
                 }
 
@@ -754,7 +871,14 @@ namespace HISWEBAPI.Controllers
             }
             else
             {
-                _log.Info($"Removing all menu mappings for BranchId={request.BranchId}, RoleId={request.RoleId}");
+                if (request.IsFirst == 1)
+                {
+                    _log.Info($"Removing all menu mappings for BranchId={request.BranchId}, RoleId={request.RoleId}");
+                }
+                else
+                {
+                    _log.Info($"No menu mappings to save for BranchId={request.BranchId}, RoleId={request.RoleId}");
+                }
             }
 
             var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
@@ -872,17 +996,7 @@ namespace HISWEBAPI.Controllers
 
                 _log.Info($"Saving user menu for TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}, RoleId={request.RoleId}, Count={request.UserMenus.Count}");
             }
-            else
-            {
-                if (request.IsFirst == 1)
-                {
-                    _log.Info($"Removing all user menus for TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}, RoleId={request.RoleId}");
-                }
-                else
-                {
-                    _log.Info($"No user menus to save for TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}, RoleId={request.RoleId}");
-                }
-            }
+            
 
             var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
 
@@ -940,6 +1054,10 @@ namespace HISWEBAPI.Controllers
                 data = serviceResult.Data
             });
         }
+
+
+
+       
 
     }
 }

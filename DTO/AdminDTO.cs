@@ -295,13 +295,15 @@ namespace HISWEBAPI.DTO
 
     public class SaveRoleWiseMenuMappingRequest
     {
-      
-
         [Required(ErrorMessage = "BranchId is required")]
         public int BranchId { get; set; }
 
         [Required(ErrorMessage = "RoleId is required")]
         public int RoleId { get; set; }
+
+        [Required(ErrorMessage = "IsFirst is required")]
+        public int IsFirst { get; set; }
+
         public List<RoleWiseMenuMappingRequest> MenuMappings { get; set; } = new List<RoleWiseMenuMappingRequest>();
     }
 

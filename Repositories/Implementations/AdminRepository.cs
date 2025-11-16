@@ -54,7 +54,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 {
                     result = 0
                 });
-
+                _distributedCache.Remove("_RoleMaster_All");
                 if (result < 0)
                 {
                     var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
@@ -98,46 +98,142 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-        public ServiceResult<IEnumerable<RoleMasterModel>> RoleMasterList()
+        public ServiceResult<string> UpdateRoleMasterStatus(int roleId, int isActive, AllGlobalValues globalValues)
         {
             try
             {
-
-                var dataTable = _sqlHelper.GetDataTable(
-                    "S_GetRoleList",
-                    CommandType.StoredProcedure,
-                    new { @roleName = "" }
-                );
-
-                var roles = dataTable?.AsEnumerable().Select(row => new RoleMasterModel
+                var result = _sqlHelper.DML("U_UpdateRoleMasterStatus", CommandType.StoredProcedure, new
                 {
-                    RoleId = row.Field<int>("RoleId"),
-                    RoleName = row.Field<string>("RoleName"),
-                    FaIconId = row.Field<int>("FaIconId"),
-                    IsActive = row.Field<int>("IsActive"),
-                    IconName = row.Field<string>("IconName"),
-                    IconClass = row.Field<string>("IconClass"),
-                    CreatedBy = row.Field<string>("CreatedBy"),
-                    CreatedOn = row.Field<string>("CreatedOn"),
-                    LastModifiedBy = row.Field<string>("LastModifiedBy"),
-                    LastModifiedOn = row.Field<string>("LastModifiedOn"),
-
-                }).ToList() ?? new List<RoleMasterModel>();
-
-                if (!roles.Any())
+                    @roleId = roleId,
+                    @userId = globalValues.userId,
+                    @isActive = isActive
+                });
+                _distributedCache.Remove("_RoleMaster_All");
+                if (result > 0)
                 {
-                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
-                    return ServiceResult<IEnumerable<RoleMasterModel>>.Failure(
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
+                    _log.Info($"Role status updated successfully. RoleId={roleId}, IsActive={isActive}");
+                    return ServiceResult<string>.Success(
+                        "Role status updated successfully",
                         alert.Type,
                         alert.Message,
-                        404 // Not Found
+                        200
+                    );
+                }
+                else
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Warn($"Role not found for RoleId={roleId}");
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        "Role not found",
+                        404
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<string>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
+        public ServiceResult<IEnumerable<RoleMasterModel>> RoleMasterList(int? roleId = null)
+        {
+            try
+            {
+                _log.Info($"RoleMasterList called. RoleId={roleId?.ToString() ?? "All"}");
+
+                // Always use the same cache key for all roles
+                string cacheKey = "_RoleMaster_All";
+
+                // Try to get all roles from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<RoleMasterModel> allRoles;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"RoleMaster data retrieved from cache. Key={cacheKey}");
+                    allRoles = System.Text.Json.JsonSerializer.Deserialize<List<RoleMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"RoleMaster cache miss. Fetching all data from database. Key={cacheKey}");
+
+                    // Fetch ALL roles from database (NO parameters passed - SP returns everything)
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetRoleList",
+                        CommandType.StoredProcedure
+                    // No parameters - SP always returns all roles
+                    );
+
+                    allRoles = dataTable?.AsEnumerable().Select(row => new RoleMasterModel
+                    {
+                        RoleId = row.Field<int>("RoleId"),
+                        RoleName = row.Field<string>("RoleName"),
+                        FaIconId = row.Field<int>("FaIconId"),
+                        IsActive = row.Field<int>("IsActive"),
+                        IconName = row.Field<string>("IconName"),
+                        IconClass = row.Field<string>("IconClass"),
+                        CreatedBy = row.Field<string>("CreatedBy"),
+                        CreatedOn = row.Field<string>("CreatedOn"),
+                        LastModifiedBy = row.Field<string>("LastModifiedBy"),
+                        LastModifiedOn = row.Field<string>("LastModifiedOn"),
+                    }).ToList() ?? new List<RoleMasterModel>();
+
+                    // Store ALL roles in cache (no expiration)
+                    if (allRoles.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(allRoles);
+                        var cacheOptions = new Microsoft.Extensions.Caching.Distributed.DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"All RoleMaster data cached permanently. Key={cacheKey}, Count={allRoles.Count}");
+                    }
+                }
+
+                // Filter in memory based on roleId parameter (always from cache)
+                List<RoleMasterModel> filteredRoles;
+                if (roleId.HasValue)
+                {
+                    _log.Info($"Filtering cached data by RoleId: {roleId.Value}");
+                    filteredRoles = allRoles.Where(r => r.RoleId == roleId.Value).ToList();
+                }
+                else
+                {
+                    _log.Info("Returning all cached roles");
+                    filteredRoles = allRoles;
+                }
+
+                if (!filteredRoles.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No roles found for RoleId: {roleId?.ToString() ?? "All"}");
+                    return ServiceResult<IEnumerable<RoleMasterModel>>.Failure(
+                        alert.Type,
+                        roleId.HasValue
+                            ? $"Role not found for RoleId: {roleId.Value}"
+                            : "No roles found",
+                        404
                     );
                 }
 
+                _log.Info($"Retrieved {filteredRoles.Count} role(s) from cache");
+
                 return ServiceResult<IEnumerable<RoleMasterModel>>.Success(
-                    roles,
+                    filteredRoles,
                     "Info",
-                    $"{roles.Count} roles fetched successfully",
+                    $"{filteredRoles.Count} role(s) fetched successfully",
                     200
                 );
             }
@@ -152,7 +248,6 @@ namespace HISWEBAPI.Repositories.Implementations
                 );
             }
         }
-
 
         public ServiceResult<IEnumerable<FaIconModel>> getFaIconMaster()
         {
@@ -228,6 +323,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 };
 
                 long result = _sqlHelper.RunProcedureInsert("IU_UserMaster", parameters);
+                _distributedCache.Remove("_UserMaster_All");
 
                 if (result == -1)
                 {
@@ -287,54 +383,150 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-
-        public ServiceResult<IEnumerable<UserMasterModel>> UserMasterList()
+        public ServiceResult<string> UpdateUserMasterStatus(int userId, int isActive, AllGlobalValues globalValues)
         {
             try
             {
-                var dataTable = _sqlHelper.GetDataTable(
-                    "S_GetUserMasterList",
-                    CommandType.StoredProcedure,
-                    new { }
-                );
-
-                var users = dataTable?.AsEnumerable().Select(row => new UserMasterModel
+                var result = _sqlHelper.DML("U_UpdateUserMasterStatus", CommandType.StoredProcedure, new
                 {
-                    Id = row.Field<int>("Id"),
-                    FirstName = row.Field<string>("FirstName"),
-                    MidelName = row.Field<string>("MidelName"),
-                    LastName = row.Field<string>("LastName"),
-                    DOB = row.Field<string>("DOB"),
-                    Gender = row.Field<string>("Gender"),
-                    UserName = row.Field<string>("UserName") ?? string.Empty,
-                    Password = row.Field<string>("Password"),
-                    Address = row.Field<string>("Address"),
-                    Contact = row.Field<string>("Contact"),
-                    Email = row.Field<string>("Email"),
-                    IsActive = row.Field<int>("IsActive"),
-                    EmployeeID = row.Field<string>("EmployeeID"),
-                    CreatedBy = row.Field<string>("CreatedBy"),
-                    CreatedOn = row.Field<string>("CreatedOn"),
-                    LastModifiedBy = row.Field<string>("LastModifiedBy"),
-                    LastModifiedOn = row.Field<string>("LastModifiedOn"),
-                    ReportToUserId = row.Field<int?>("ReportToUserId"),
-                    UserDepartmentId = row.Field<int?>("UserDepartmentId")
-                }).ToList() ?? new List<UserMasterModel>();
+                    @userId = userId,
+                    @loginUserId = globalValues.userId,
+                    @isActive = isActive
+                });
+                _distributedCache.Remove("_UserMaster_All");
 
-                if (!users.Any())
+                if (result > 0)
                 {
-                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
-                    return ServiceResult<IEnumerable<UserMasterModel>>.Failure(
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
+                    _log.Info($"User status updated successfully. UserId={userId}, IsActive={isActive}");
+                    return ServiceResult<string>.Success(
+                        "User status updated successfully",
                         alert.Type,
                         alert.Message,
-                        404 // Not Found
+                        200
+                    );
+                }
+                else
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Warn($"User not found for UserId={userId}");
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        "User not found",
+                        404
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<string>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<UserMasterModel>> UserMasterList(int? userId = null)
+        {
+            try
+            {
+                _log.Info($"UserMasterList called. UserId={userId?.ToString() ?? "All"}");
+
+                string cacheKey = "_UserMaster_All";
+
+                // Try to get all roles from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<UserMasterModel> allUsers;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"UserMaster data retrieved from cache. Key={cacheKey}");
+                    allUsers = System.Text.Json.JsonSerializer.Deserialize<List<UserMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"UserMaster cache miss. Fetching all data from database. Key={cacheKey}");
+
+                    // Fetch ALL users from database (NO parameters - SP returns everything)
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetUserMasterList",
+                        CommandType.StoredProcedure
+                    // No parameters - SP always returns all users
+                    );
+
+                    allUsers = dataTable?.AsEnumerable().Select(row => new UserMasterModel
+                    {
+                        Id = row.Field<int>("Id"),
+                        FirstName = row.Field<string>("FirstName"),
+                        MidelName = row.Field<string>("MidelName"),
+                        LastName = row.Field<string>("LastName"),
+                        DOB = row.Field<string>("DOB"),
+                        Gender = row.Field<string>("Gender"),
+                        UserName = row.Field<string>("UserName") ?? string.Empty,
+                        Password = row.Field<string>("Password"),
+                        Address = row.Field<string>("Address"),
+                        Contact = row.Field<string>("Contact"),
+                        Email = row.Field<string>("Email"),
+                        IsActive = row.Field<int>("IsActive"),
+                        EmployeeID = row.Field<string>("EmployeeID"),
+                        CreatedBy = row.Field<string>("CreatedBy"),
+                        CreatedOn = row.Field<string>("CreatedOn"),
+                        LastModifiedBy = row.Field<string>("LastModifiedBy"),
+                        LastModifiedOn = row.Field<string>("LastModifiedOn"),
+                        ReportToUserId = row.Field<int?>("ReportToUserId"),
+                        UserDepartmentId = row.Field<int?>("UserDepartmentId")
+                    }).ToList() ?? new List<UserMasterModel>();
+
+                    // Store ALL users in cache (no expiration)
+                    if (allUsers.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(allUsers);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"All UserMaster data cached permanently. Key={cacheKey}, Count={allUsers.Count}");
+                    }
+                }
+
+                // Filter in memory based on userId parameter (always from cache)
+                List<UserMasterModel> filteredUsers;
+                if (userId.HasValue)
+                {
+                    _log.Info($"Filtering cached data by UserId: {userId.Value}");
+                    filteredUsers = allUsers.Where(u => u.Id == userId.Value).ToList();
+                }
+                else
+                {
+                    _log.Info("Returning all cached users");
+                    filteredUsers = allUsers;
+                }
+
+                if (!filteredUsers.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No users found for UserId: {userId?.ToString() ?? "All"}");
+                    return ServiceResult<IEnumerable<UserMasterModel>>.Failure(
+                        alert.Type,
+                        userId.HasValue
+                            ? $"User not found for UserId: {userId.Value}"
+                            : "No users found",
+                        404
                     );
                 }
 
+                _log.Info($"Retrieved {filteredUsers.Count} user(s) from cache");
+
                 return ServiceResult<IEnumerable<UserMasterModel>>.Success(
-                    users,
+                    filteredUsers,
                     "Info",
-                    $"{users.Count} users fetched successfully",
+                    $"{filteredUsers.Count} user(s) fetched successfully",
                     200
                 );
             }
@@ -349,7 +541,6 @@ namespace HISWEBAPI.Repositories.Implementations
                 );
             }
         }
-
 
         public ServiceResult<string> CreateUpdateUserDepartment(UserDepartmentRequest request, AllGlobalValues globalValues)
         {
@@ -1455,54 +1646,78 @@ namespace HISWEBAPI.Repositories.Implementations
 
 
 
-       
+
 
         public ServiceResult<string> SaveUpdateRoleWiseMenuMapping(
-            SaveRoleWiseMenuMappingRequest request,
-            AllGlobalValues globalValues)
+      SaveRoleWiseMenuMappingRequest request,
+      AllGlobalValues globalValues)
         {
             try
             {
-                // Delete existing role-wise menu mappings
-                var deleteResult = _sqlHelper.DML("D_DeleteRoleWiseMenuMappingMaster", CommandType.StoredProcedure, new
+                // Delete existing role-wise menu mappings only if IsFirst = 1
+                if (request.IsFirst == 1)
                 {
-                    @BranchId = request.BranchId,
-                    @RoleId = request.RoleId
-                },
-                new
-                {
-                    result = 0
-                });
+                    var deleteResult = _sqlHelper.DML("D_DeleteRoleWiseMenuMappingMaster", CommandType.StoredProcedure, new
+                    {
+                        @BranchId = request.BranchId,
+                        @RoleId = request.RoleId
+                    },
+                    new
+                    {
+                        result = 0
+                    });
 
-                _log.Info($"Deleted existing role-wise menu mappings for BranchId={request.BranchId}, RoleId={request.RoleId}");
+                    _log.Info($"Deleted existing role-wise menu mappings for BranchId={request.BranchId}, RoleId={request.RoleId}");
+                }
 
                 // If MenuMappings list is empty or null, only delete operation was needed
                 if (request.MenuMappings == null || !request.MenuMappings.Any())
                 {
-                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_DELETED_SUCCESSFULLY");
-                    _log.Info("Role-wise menu mappings deleted successfully. No new mappings to insert.");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
+                    );
+                    _log.Info("Role-wise menu mapping operation completed. No new mappings to insert.");
 
                     return ServiceResult<string>.Success(
-                        "Role-wise menu mappings deleted successfully",
+                        request.IsFirst == 1 ? "Role-wise menu mappings deleted successfully" : "No menu mappings to save",
                         alert.Type,
                         alert.Message,
                         200
                     );
                 }
 
-                // If MenuMappings list has items with SubMenuId = 0, skip them
+                // Filter out items with SubMenuId = 0
                 var validMenuMappings = request.MenuMappings.Where(mm => mm.SubMenuId != 0).ToList();
 
                 if (!validMenuMappings.Any())
                 {
-                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_DELETED_SUCCESSFULLY");
-                    _log.Info("Role-wise menu mappings deleted successfully. No valid mappings to insert.");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
+                    );
+                    _log.Info("Role-wise menu mapping operation completed. No valid mappings to insert.");
 
                     return ServiceResult<string>.Success(
-                        "Role-wise menu mappings deleted successfully",
+                        request.IsFirst == 1 ? "Role-wise menu mappings deleted successfully" : "No valid menu mappings to save",
                         alert.Type,
                         alert.Message,
                         200
+                    );
+                }
+
+                // Validate consistency of all items with parent request
+                bool isConsistent = validMenuMappings.All(x =>
+                    x.BranchId == request.BranchId &&
+                    x.RoleId == request.RoleId);
+
+                if (!isConsistent)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    _log.Warn("Inconsistent BranchId or RoleId in menu mapping list.");
+
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        "All menu mapping items must have the same BranchId and RoleId as the request",
+                        400
                     );
                 }
 
@@ -1801,6 +2016,7 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-
+     
+       
     }
 }

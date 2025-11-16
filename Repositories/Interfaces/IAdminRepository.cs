@@ -7,10 +7,12 @@ namespace HISWEBAPI.Repositories.Interfaces
     public interface IAdminRepository
     {
         ServiceResult<string> CreateUpdateRoleMaster(RoleMasterRequest request, AllGlobalValues globalValues);
-        ServiceResult<IEnumerable<RoleMasterModel>> RoleMasterList();
+        ServiceResult<string> UpdateRoleMasterStatus(int roleId, int isActive, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<RoleMasterModel>> RoleMasterList(int? roleId = null);
         ServiceResult<IEnumerable<FaIconModel>> getFaIconMaster();
         ServiceResult<UserMasterResponse> CreateUpdateUserMaster(UserMasterRequest request);
-        ServiceResult<IEnumerable<UserMasterModel>> UserMasterList();
+        ServiceResult<string> UpdateUserMasterStatus(int userId, int isActive, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<UserMasterModel>> UserMasterList(int? userId = null);
         ServiceResult<string> CreateUpdateUserDepartment(UserDepartmentRequest request, AllGlobalValues globalValues);
         ServiceResult<IEnumerable<UserDepartmentMasterModel>> UserDepartmentList();
         ServiceResult<string> CreateUpdateUserGroupMaster(UserGroupRequest request, AllGlobalValues globalValues);
@@ -31,6 +33,5 @@ namespace HISWEBAPI.Repositories.Interfaces
         ServiceResult<IEnumerable<RoleWiseMenuMappingModel>> GetRoleWiseMenuMapping(int branchId, int roleId);
         ServiceResult<string> SaveUpdateUserMenuMaster(SaveUserMenuMasterRequest request, AllGlobalValues globalValues);
         ServiceResult<IEnumerable<UserWiseMenuMasterModel>> GetUserWiseMenuMaster(int branchId, int typeId, int userId, int roleId);
-
     }
 }

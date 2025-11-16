@@ -131,7 +131,9 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-   
+
+
+
         public ServiceResult<IEnumerable<PageConfigResponse>> GetPageConfig(string configKey = null)
         {
             try
@@ -154,11 +156,11 @@ namespace HISWEBAPI.Repositories.Implementations
                 {
                     _log.Info($"PageConfig cache miss. Fetching all data from database. Key={cacheKey}");
 
-                    // Fetch ALL configurations from database (pass NULL to SP)
+                    // Fetch ALL configurations from database (NO parameters - SP returns everything)
                     var dataTable = _sqlHelper.GetDataTable(
                         "S_GetPageConfigMaster",
-                        CommandType.StoredProcedure,
-                        new { ConfigKey = (string)null }
+                        CommandType.StoredProcedure
+                    // No parameters - SP always returns all active configs
                     );
 
                     allConfigurations = dataTable?.AsEnumerable().Select(row => new PageConfigResponse
@@ -184,7 +186,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     }
                 }
 
-                // Filter in memory based on ConfigKey parameter
+                // Filter in memory based on ConfigKey parameter (always from cache)
                 List<PageConfigResponse> filteredConfigurations;
                 if (!string.IsNullOrWhiteSpace(configKey))
                 {
@@ -233,6 +235,5 @@ namespace HISWEBAPI.Repositories.Implementations
                 );
             }
         }
-
     }
 }
