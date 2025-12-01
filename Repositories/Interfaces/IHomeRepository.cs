@@ -7,5 +7,7 @@ namespace HISWEBAPI.Repositories.Interfaces
     {
         ServiceResult<IEnumerable<BranchModel>> GetActiveBranchList();
         ServiceResult<IEnumerable<PickListModel>> GetPickListMaster(string fieldName);
+        ServiceResult<AllGlobalValues> GetAllGlobalValues();
+        ServiceResult<string> ClearAllCache();
     }
 }

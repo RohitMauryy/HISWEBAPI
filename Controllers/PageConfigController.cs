@@ -7,11 +7,11 @@ using HISWEBAPI.DTO;
 using HISWEBAPI.Models;
 using HISWEBAPI.Repositories.Interfaces;
 using HISWEBAPI.Services;
-using HISWEBAPI.Models.Configuration;
+using HISWEBAPI.Configuration;
 
 namespace HISWEBAPI.Controllers
 {
-    
+
     [Route("api/[controller]")]
     [ApiController]
     public class PageConfigController : ControllerBase

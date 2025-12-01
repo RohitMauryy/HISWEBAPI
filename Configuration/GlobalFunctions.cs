@@ -3,11 +3,11 @@ using HISWEBAPI.Models;
 using System.Linq;
 using System.Security.Claims;
 
-namespace HISWEBAPI.Models.Configuration
+namespace HISWEBAPI.Configuration
 {
     public static class GlobalFunctions
     {
-        
+
         public static AllGlobalValues GetGlobalValues(HttpContext httpContext)
         {
             if (httpContext == null)
@@ -37,7 +37,7 @@ namespace HISWEBAPI.Models.Configuration
             };
         }
 
-       
+
         public static AllGlobalValues GetGlobalValues(ClaimsPrincipal user, string ipAddress)
         {
             if (user == null)

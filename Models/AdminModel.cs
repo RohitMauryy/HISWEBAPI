@@ -96,17 +96,12 @@
 
     public class UserGroupMembersModel
     {
-        public int Id { get; set; }
+        public int isGranted { get; set; }
         public int GroupId { get; set; }
         public int UserId { get; set; }
         public string? GroupName { get; set; }
         public string? UserName { get; set; }
-        public int IsActive { get; set; }
-        public string? CreatedBy { get; set; }
-        public string? CreatedOn { get; set; }
-        public string? LastModifiedBy { get; set; }
-        public string? LastModifiedOn { get; set; }
-        public string? IPAddress { get; set; }
+       
     }
 
     public class UserRoleMappingModel

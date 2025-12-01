@@ -15,6 +15,7 @@ using HISWEBAPI.Exceptions;
 using HISWEBAPI.Services.Interfaces;
 using HISWEBAPI.Configuration;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Caching.Distributed;
 
 namespace HISWEBAPI.Repositories.Implementations
 {
@@ -26,6 +27,7 @@ namespace HISWEBAPI.Repositories.Implementations
         private readonly IEmailService _emailService;
         private readonly IJwtService _jwtService;
         private readonly JwtSettings _jwtSettings;
+        private readonly IDistributedCache _distributedCache;
         private static readonly ILog _log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         public UserRepository(
@@ -34,7 +36,8 @@ namespace HISWEBAPI.Repositories.Implementations
             ISmsService smsService,
             IEmailService emailService,
             IJwtService jwtService,
-            IOptions<JwtSettings> jwtSettings)
+            IOptions<JwtSettings> jwtSettings,
+            IDistributedCache distributedCache)
         {
             _sqlHelper = sqlHelper;
             _messageService = messageService;
@@ -42,6 +45,8 @@ namespace HISWEBAPI.Repositories.Implementations
             _emailService = emailService;
             _jwtService = jwtService;
             _jwtSettings = jwtSettings.Value;
+            _distributedCache = distributedCache;
+
         }
 
         public ServiceResult<UserLoginResponseData> UserLogin(UserLoginRequest request)
@@ -269,7 +274,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 };
 
                 long result = _sqlHelper.RunProcedureInsert("I_NewUserSignUp", parameters);
-
+                _distributedCache.Remove("_UserMaster_All");
                 if (result == -1)
                 {
                     var alert = _messageService.GetMessageAndTypeByAlertCode("USERNAME_EXISTS");

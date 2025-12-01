@@ -14,9 +14,11 @@ namespace HISWEBAPI.Repositories.Interfaces
         ServiceResult<string> UpdateUserMasterStatus(int userId, int isActive, AllGlobalValues globalValues);
         ServiceResult<IEnumerable<UserMasterModel>> UserMasterList(int? userId = null);
         ServiceResult<string> CreateUpdateUserDepartment(UserDepartmentRequest request, AllGlobalValues globalValues);
-        ServiceResult<IEnumerable<UserDepartmentMasterModel>> UserDepartmentList();
+        ServiceResult<string> UpdateUserDepartmentStatus(int id, int isActive, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<UserDepartmentMasterModel>> UserDepartmentList(int? id = null);
         ServiceResult<string> CreateUpdateUserGroupMaster(UserGroupRequest request, AllGlobalValues globalValues);
-        ServiceResult<IEnumerable<UserGroupMasterModel>> UserGroupList();
+        ServiceResult<string> UpdateUserGroupStatus(int id, int isActive, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<UserGroupMasterModel>> UserGroupList(int? id = null);
         ServiceResult<string> CreateUpdateUserGroupMembers(UserGroupMembersRequest request, AllGlobalValues globalValues);
         ServiceResult<IEnumerable<UserGroupMembersModel>> UserGroupMembersList(int? groupId);
         ServiceResult<IEnumerable<UserRoleMappingModel>> GetAssignRoleForUserAuthorization(int branchId, int typeId, int userId);

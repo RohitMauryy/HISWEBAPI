@@ -11,7 +11,7 @@ using HISWEBAPI.Models;
 using HISWEBAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using HISWEBAPI.Repositories.Implementations;
-using HISWEBAPI.Models.Configuration;
+using HISWEBAPI.Configuration;
 
 namespace HISWEBAPI.Controllers
 {
@@ -250,6 +250,8 @@ namespace HISWEBAPI.Controllers
             });
         }
 
+       
+
 
         [HttpGet("userMasterList")]
         [Authorize]
@@ -305,16 +307,68 @@ namespace HISWEBAPI.Controllers
             });
         }
 
+        [HttpPatch("updateUserDepartmentStatus")]
+        [Authorize]
+        public IActionResult UpdateUserDepartmentStatus([FromQuery] int id, [FromQuery] int isActive)
+        {
+            _log.Info($"UpdateUserDepartmentStatus called. Id={id}, IsActive={isActive}");
+
+            if (id <= 0)
+            {
+                _log.Warn("Invalid Id provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "Id must be greater than 0",
+                    errors = new { id }
+                });
+            }
+
+            if (isActive != 0 && isActive != 1)
+            {
+                _log.Warn("Invalid IsActive value provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 or 1",
+                    errors = new { isActive }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.UpdateUserDepartmentStatus(id, isActive, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Department status updated successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"Department status update failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
         [HttpGet("userDepartmentList")]
         [Authorize]
-        public IActionResult UserDepartmentList()
+        public IActionResult UserDepartmentList([FromQuery] int? id = null)
         {
-            _log.Info("UserDepartmentList called.");
-            var serviceResult = _adminRepository.UserDepartmentList();
+            _log.Info($"UserDepartmentList called. Id={id?.ToString() ?? "All"}");
+
+            var serviceResult = _adminRepository.UserDepartmentList(id);
+
             if (serviceResult.Result)
                 _log.Info($"Departments fetched successfully: {serviceResult.Message}");
             else
                 _log.Warn($"No departments found: {serviceResult.Message}");
+
             return StatusCode(serviceResult.StatusCode, new
             {
                 result = serviceResult.Result,
@@ -356,16 +410,56 @@ namespace HISWEBAPI.Controllers
             });
         }
 
-        [HttpGet("userGroupList")]
+        //[HttpGet("userGroupList")]
+        //[Authorize]
+        //public IActionResult UserGroupList()
+        //{
+        //    _log.Info("UserGroupList called.");
+        //    var serviceResult = _adminRepository.UserGroupList();
+        //    if (serviceResult.Result)
+        //        _log.Info($"Groups fetched successfully: {serviceResult.Message}");
+        //    else
+        //        _log.Warn($"No groups found: {serviceResult.Message}");
+        //    return StatusCode(serviceResult.StatusCode, new
+        //    {
+        //        result = serviceResult.Result,
+        //        messageType = serviceResult.MessageType,
+        //        message = serviceResult.Message,
+        //        data = serviceResult.Data
+        //    });
+        //}
+
+        [HttpPatch("updateUserGroupStatus")]
         [Authorize]
-        public IActionResult UserGroupList()
+        public IActionResult UpdateUserGroupStatus([FromQuery] int id, [FromQuery] int isActive)
         {
-            _log.Info("UserGroupList called.");
-            var serviceResult = _adminRepository.UserGroupList();
-            if (serviceResult.Result)
-                _log.Info($"Groups fetched successfully: {serviceResult.Message}");
-            else
-                _log.Warn($"No groups found: {serviceResult.Message}");
+            _log.Info($"UpdateUserGroupStatus called. Id={id}, IsActive={isActive}");
+
+            if (id <= 0)
+            {
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "Id must be greater than 0"
+                });
+            }
+
+            if (isActive != 0 && isActive != 1)
+            {
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 or 1"
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.UpdateUserGroupStatus(id, isActive, globalValues);
+
             return StatusCode(serviceResult.StatusCode, new
             {
                 result = serviceResult.Result,
@@ -374,6 +468,24 @@ namespace HISWEBAPI.Controllers
                 data = serviceResult.Data
             });
         }
+
+
+        [HttpGet("userGroupList")]
+        [Authorize]
+        public IActionResult UserGroupList([FromQuery] int? id = null)
+        {
+            _log.Info($"UserGroupList called. Id={id?.ToString() ?? "All"}");
+            var serviceResult = _adminRepository.UserGroupList(id);
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
 
 
         [HttpPost("createUpdateUserGroupMembers")]
@@ -410,9 +522,21 @@ namespace HISWEBAPI.Controllers
 
         [HttpGet("userGroupMembersList")]
         [Authorize]
-        public IActionResult UserGroupMembersList([FromQuery] int? groupId = null)
+        public IActionResult UserGroupMembersList([FromQuery] int? groupId)
         {
             _log.Info("UserGroupMembersList called.");
+            if (groupId == null || groupId <= 0)
+            {
+                _log.Warn("Invalid GroupId supplied.");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = "ERROR",
+                    message = "GroupId is mandatory and must be greater than 0.",
+                    data = ""
+                });
+            }
+
             var serviceResult = _adminRepository.UserGroupMembersList(groupId);
             if (serviceResult.Result)
                 _log.Info($"Group members fetched successfully: {serviceResult.Message}");

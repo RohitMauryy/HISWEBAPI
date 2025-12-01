@@ -67,7 +67,7 @@ public static class DependencyInjection
 
     private static void RegisterCaching(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDistributedRedisCache(options =>
+        services.AddStackExchangeRedisCache(options =>
         {
             options.Configuration = configuration.GetValue<string>("Redis:Configuration") ?? "localhost:6379";
         });

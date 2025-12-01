@@ -253,41 +253,85 @@ namespace HISWEBAPI.Repositories.Implementations
         {
             try
             {
-                var dataTable = _sqlHelper.GetDataTable(
-                    "S_getFaIconMaster",
-                    CommandType.StoredProcedure
-                );
+                _log.Info("getFaIconMaster called.");
 
-                var dt = dataTable?.AsEnumerable().Select(row => new FaIconModel
+                // Cache key for FaIcon
+                string cacheKey = "_FaIconMaster_All";
+
+                // Try to get cached data
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<FaIconModel> faIcons;
+
+                if (!string.IsNullOrEmpty(cachedData))
                 {
-                    Id = row.Field<int>("Id"),
-                    IconName = row.Field<string>("IconName"),
-                    IconClass = row.Field<string>("IconClass"),
+                    _log.Info($"FaIconMaster data retrieved from cache. Key={cacheKey}");
 
-                }).ToList() ?? new List<FaIconModel>();
+                    faIcons = System.Text.Json.JsonSerializer.Deserialize<List<FaIconModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"FaIconMaster cache miss. Fetching from database. Key={cacheKey}");
 
-                if (!dt.Any())
+                    // Fetch from DB
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_getFaIconMaster",
+                        CommandType.StoredProcedure
+                    );
+
+                    faIcons = dataTable?.AsEnumerable().Select(row => new FaIconModel
+                    {
+                        Id = row.Field<int>("Id"),
+                        IconName = row.Field<string>("IconName"),
+                        IconClass = row.Field<string>("IconClass")
+                    }).ToList() ?? new List<FaIconModel>();
+
+                    // Store in Redis permanently
+                    if (faIcons.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(faIcons);
+
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+
+                        _log.Info($"FaIconMaster cached permanently. Key={cacheKey}, Count={faIcons.Count}");
+                    }
+                }
+
+                // Check if empty
+                if (!faIcons.Any())
                 {
                     var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+
+                    _log.Info("No FaIcon data found");
                     return ServiceResult<IEnumerable<FaIconModel>>.Failure(
                         alert.Type,
                         alert.Message,
-                        404 // Not Found
+                        404
                     );
                 }
-                var alert2 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_COMPLETED_SUCCESSFULLY");
+
+                var alertSuccess = _messageService.GetMessageAndTypeByAlertCode("OPERATION_COMPLETED_SUCCESSFULLY");
+
+                _log.Info($"Retrieved {faIcons.Count} fa icon(s) from cache");
 
                 return ServiceResult<IEnumerable<FaIconModel>>.Success(
-                    dt,
-                     alert2.Type,
-                     alert2.Message,
+                    faIcons,
+                    alertSuccess.Type,
+                    $"{faIcons.Count} fa icon(s) retrieved successfully",
                     200
                 );
             }
             catch (Exception ex)
             {
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+
                 var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+
                 return ServiceResult<IEnumerable<FaIconModel>>.Failure(
                     alert.Type,
                     alert.Message,
@@ -558,6 +602,8 @@ namespace HISWEBAPI.Repositories.Implementations
                 {
                     result = 0
                 });
+                // Clear cache after successful operation
+                _distributedCache.Remove("_UserDepartment_All");
 
                 if (result < 0)
                 {
@@ -602,42 +648,132 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-        public ServiceResult<IEnumerable<UserDepartmentMasterModel>> UserDepartmentList()
+
+        public ServiceResult<string> UpdateUserDepartmentStatus(int id, int isActive, AllGlobalValues globalValues)
         {
             try
             {
-                var dataTable = _sqlHelper.GetDataTable(
-                    "S_GetUserDepartmentList",
-                    CommandType.StoredProcedure,
-                    new { }
+                var result = _sqlHelper.DML("U_UserDepartmentStatus", CommandType.StoredProcedure, new
+                {
+                    @Id = id,
+                    @IsActive = isActive,
+                    @UserId = globalValues.userId,
+                    @IpAddress = globalValues.ipAddress
+                });
+
+                // Clear cache after successful update
+                _distributedCache.Remove("_UserDepartment_All");
+
+                var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
+                _log.Info($"User department status updated successfully. Id={id}, IsActive={isActive}");
+                return ServiceResult<string>.Success(
+                    "Department status updated successfully",
+                    alert.Type,
+                    alert.Message,
+                    200
                 );
 
-                var departments = dataTable?.AsEnumerable().Select(row => new UserDepartmentMasterModel
-                {
-                    Id = row.Field<int>("Id"),
-                    DepartmentName = row.Field<string>("DepartmentName") ?? string.Empty,
-                    IsActive = row.Field<int>("IsActive"),
-                    CreatedBy = row.Field<string>("CreatedBy"),
-                    CreatedOn = row.Field<string>("CreatedOn"),
-                    LastModifiedBy = row.Field<string>("LastModifiedBy"),
-                    LastModifiedOn = row.Field<string>("LastModifiedOn"),
-                    IPAddress = row.Field<string>("IPAddress")
-                }).ToList() ?? new List<UserDepartmentMasterModel>();
 
-                if (!departments.Any())
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<string>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<UserDepartmentMasterModel>> UserDepartmentList(int? id = null)
+        {
+            try
+            {
+                _log.Info($"UserDepartmentList called. Id={id?.ToString() ?? "All"}");
+
+                string cacheKey = "_UserDepartment_All";
+
+                // Try to get all departments from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<UserDepartmentMasterModel> allDepartments;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"UserDepartment data retrieved from cache. Key={cacheKey}");
+                    allDepartments = System.Text.Json.JsonSerializer.Deserialize<List<UserDepartmentMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"UserDepartment cache miss. Fetching all data from database. Key={cacheKey}");
+
+                    // Fetch ALL departments from database (NO parameters - SP returns everything)
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetUserDepartmentList",
+                        CommandType.StoredProcedure
+                    // No parameters - SP always returns all departments
+                    );
+
+                    allDepartments = dataTable?.AsEnumerable().Select(row => new UserDepartmentMasterModel
+                    {
+                        Id = row.Field<int>("Id"),
+                        DepartmentName = row.Field<string>("DepartmentName") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive"),
+                        CreatedBy = row.Field<string>("CreatedBy"),
+                        CreatedOn = row.Field<string>("CreatedOn"),
+                        LastModifiedBy = row.Field<string>("LastModifiedBy"),
+                        LastModifiedOn = row.Field<string>("LastModifiedOn"),
+                        IPAddress = row.Field<string>("IPAddress")
+                    }).ToList() ?? new List<UserDepartmentMasterModel>();
+
+                    // Store ALL departments in cache (no expiration)
+                    if (allDepartments.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(allDepartments);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"All UserDepartment data cached permanently. Key={cacheKey}, Count={allDepartments.Count}");
+                    }
+                }
+
+                // Filter in memory based on id parameter (always from cache)
+                List<UserDepartmentMasterModel> filteredDepartments;
+                if (id.HasValue)
+                {
+                    _log.Info($"Filtering cached data by Id: {id.Value}");
+                    filteredDepartments = allDepartments.Where(d => d.Id == id.Value).ToList();
+                }
+                else
+                {
+                    _log.Info("Returning all cached departments");
+                    filteredDepartments = allDepartments;
+                }
+
+                if (!filteredDepartments.Any())
                 {
                     var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No departments found for Id: {id?.ToString() ?? "All"}");
                     return ServiceResult<IEnumerable<UserDepartmentMasterModel>>.Failure(
                         alert.Type,
-                        alert.Message,
-                        404 // Not Found
+                        id.HasValue
+                            ? $"Department not found for Id: {id.Value}"
+                            : "No departments found",
+                        404
                     );
                 }
 
+                _log.Info($"Retrieved {filteredDepartments.Count} department(s) from cache");
+
                 return ServiceResult<IEnumerable<UserDepartmentMasterModel>>.Success(
-                    departments,
+                    filteredDepartments,
                     "Info",
-                    $"{departments.Count} departments fetched successfully",
+                    $"{filteredDepartments.Count} department(s) fetched successfully",
                     200
                 );
             }
@@ -670,6 +806,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 {
                     result = 0
                 });
+                _distributedCache.Remove("_UserGroupMaster_All");
 
                 if (result < 0)
                 {
@@ -714,42 +851,164 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-        public ServiceResult<IEnumerable<UserGroupMasterModel>> UserGroupList()
+        //public ServiceResult<IEnumerable<UserGroupMasterModel>> UserGroupList()
+        //{
+        //    try
+        //    {
+        //        var dataTable = _sqlHelper.GetDataTable(
+        //            "S_GetUserGroupList",
+        //            CommandType.StoredProcedure,
+        //            new { }
+        //        );
+
+        //        var groups = dataTable?.AsEnumerable().Select(row => new UserGroupMasterModel
+        //        {
+        //            Id = row.Field<int>("Id"),
+        //            GroupName = row.Field<string>("GroupName") ?? string.Empty,
+        //            IsActive = row.Field<int>("IsActive"),
+        //            CreatedBy = row.Field<string>("CreatedBy"),
+        //            CreatedOn = row.Field<string>("CreatedOn"),
+        //            LastModifiedBy = row.Field<string>("LastModifiedBy"),
+        //            LastModifiedOn = row.Field<string>("LastModifiedOn"),
+        //            IPAddress = row.Field<string>("IPAddress")
+        //        }).ToList() ?? new List<UserGroupMasterModel>();
+
+        //        if (!groups.Any())
+        //        {
+        //            var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+        //            return ServiceResult<IEnumerable<UserGroupMasterModel>>.Failure(
+        //                alert.Type,
+        //                alert.Message,
+        //                404 // Not Found
+        //            );
+        //        }
+
+        //        return ServiceResult<IEnumerable<UserGroupMasterModel>>.Success(
+        //            groups,
+        //            "Info",
+        //            $"{groups.Count} groups fetched successfully",
+        //            200
+        //        );
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+        //        var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+        //        return ServiceResult<IEnumerable<UserGroupMasterModel>>.Failure(
+        //            alert.Type,
+        //            alert.Message,
+        //            500
+        //        );
+        //    }
+        //}
+
+        public ServiceResult<string> UpdateUserGroupStatus(int id, int isActive, AllGlobalValues globalValues)
         {
             try
             {
-                var dataTable = _sqlHelper.GetDataTable(
-                    "S_GetUserGroupList",
-                    CommandType.StoredProcedure,
-                    new { }
-                );
-
-                var groups = dataTable?.AsEnumerable().Select(row => new UserGroupMasterModel
+                var result = _sqlHelper.DML("U_UpdateUserGroupStatus", CommandType.StoredProcedure, new
                 {
-                    Id = row.Field<int>("Id"),
-                    GroupName = row.Field<string>("GroupName") ?? string.Empty,
-                    IsActive = row.Field<int>("IsActive"),
-                    CreatedBy = row.Field<string>("CreatedBy"),
-                    CreatedOn = row.Field<string>("CreatedOn"),
-                    LastModifiedBy = row.Field<string>("LastModifiedBy"),
-                    LastModifiedOn = row.Field<string>("LastModifiedOn"),
-                    IPAddress = row.Field<string>("IPAddress")
-                }).ToList() ?? new List<UserGroupMasterModel>();
+                    @Id = id,
+                    @IsActive = isActive,
+                    @UserId = globalValues.userId,
+                    @IpAddress = globalValues.ipAddress
+                });
 
-                if (!groups.Any())
+                _distributedCache.Remove("_UserGroupMaster_All");
+
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
+                    return ServiceResult<string>.Success(
+                        "Group status updated successfully",
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+              
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<string>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<UserGroupMasterModel>> UserGroupList(int? id = null)
+        {
+            try
+            {
+                _log.Info($"UserGroupList called. Id={id?.ToString() ?? "All"}");
+
+                string cacheKey = "_UserGroupMaster_All";
+
+                // Try from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<UserGroupMasterModel> allGroups;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info("UserGroupMaster data retrieved from cache");
+                    allGroups = System.Text.Json.JsonSerializer.Deserialize<List<UserGroupMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info("UserGroupMaster cache miss. Fetching from DB");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetUserGroupList",
+                        CommandType.StoredProcedure
+                    );
+
+                    allGroups = dataTable?.AsEnumerable().Select(row => new UserGroupMasterModel
+                    {
+                        Id = row.Field<int>("Id"),
+                        GroupName = row.Field<string>("GroupName") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive"),
+                        CreatedBy = row.Field<string>("CreatedBy"),
+                        CreatedOn = row.Field<string>("CreatedOn"),
+                        LastModifiedBy = row.Field<string>("LastModifiedBy"),
+                        LastModifiedOn = row.Field<string>("LastModifiedOn"),
+                        IPAddress = row.Field<string>("IPAddress")
+                    }).ToList() ?? new List<UserGroupMasterModel>();
+
+                    if (allGroups.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(allGroups);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info("UserGroupMaster cached permanently");
+                    }
+                }
+
+                // Filter
+                List<UserGroupMasterModel> filteredGroups;
+                if (id.HasValue)
+                    filteredGroups = allGroups.Where(x => x.Id == id.Value).ToList();
+                else
+                    filteredGroups = allGroups;
+
+                if (!filteredGroups.Any())
                 {
                     var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
                     return ServiceResult<IEnumerable<UserGroupMasterModel>>.Failure(
                         alert.Type,
-                        alert.Message,
-                        404 // Not Found
+                        id.HasValue ? "Group not found" : "No groups found",
+                        404
                     );
                 }
 
                 return ServiceResult<IEnumerable<UserGroupMasterModel>>.Success(
-                    groups,
+                    filteredGroups,
                     "Info",
-                    $"{groups.Count} groups fetched successfully",
+                    $"{filteredGroups.Count} record(s) fetched successfully",
                     200
                 );
             }
@@ -826,17 +1085,11 @@ namespace HISWEBAPI.Repositories.Implementations
 
                 var members = dataTable?.AsEnumerable().Select(row => new UserGroupMembersModel
                 {
-                    Id = row.Field<int>("Id"),
+                    isGranted = row.Field<int>("isGranted"),
                     GroupId = row.Field<int>("GroupId"),
                     UserId = row.Field<int>("UserId"),
                     GroupName = row.Field<string>("GroupName"),
-                    UserName = row.Field<string>("UserName"),
-                    IsActive = row.Field<int>("IsActive"),
-                    CreatedBy = row.Field<string>("CreatedBy"),
-                    CreatedOn = row.Field<string>("CreatedOn"),
-                    LastModifiedBy = row.Field<string>("LastModifiedBy"),
-                    LastModifiedOn = row.Field<string>("LastModifiedOn"),
-                    IPAddress = row.Field<string>("IPAddress")
+                    UserName = row.Field<string>("UserName")
                 }).ToList() ?? new List<UserGroupMembersModel>();
 
                 if (!members.Any())

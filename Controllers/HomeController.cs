@@ -9,7 +9,7 @@ using HISWEBAPI.DTO;
 using HISWEBAPI.Services;
 using HISWEBAPI.Models;
 using Microsoft.AspNetCore.Authorization;
-using HISWEBAPI.Models.Configuration;
+using HISWEBAPI.Configuration;
 
 namespace HISWEBAPI.Controllers
 {
@@ -29,8 +29,36 @@ namespace HISWEBAPI.Controllers
             _messageService = messageService;
         }
 
-      
 
+        [HttpPost("clearAllCache")]
+        [Authorize]
+        public IActionResult ClearAllCache()
+        {
+            _log.Info("ClearAllCache API endpoint called.");
+
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+
+            var serviceResult = _homeRepository.ClearAllCache();
+
+            if (serviceResult.Result)
+            {
+                _log.Info($"Cache cleared successfully by UserId={globalValues.userId} from IP={globalValues.ipAddress}");
+            }
+            else
+            {
+                _log.Warn($"Cache clearing failed: {serviceResult.Message}");
+            }
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+
+        }
 
         [HttpGet("getActiveBranchList")]
         [AllowAnonymous]
@@ -122,5 +150,30 @@ namespace HISWEBAPI.Controllers
                 });
           
         }
+
+        [HttpGet("getAllGlobalValues")]
+        [Authorize]
+        public IActionResult GetAllGlobalValues()
+        {
+            _log.Info("GetAllGlobalValues endpoint called.");
+
+                var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+
+                _log.Info($"Global values retrieved: HospId={globalValues.hospId}, UserId={globalValues.userId}, BranchId={globalValues.branchId}, IpAddress={globalValues.ipAddress}");
+
+                var alert = _messageService.GetMessageAndTypeByAlertCode("OPERATION_COMPLETED_SUCCESSFULLY");
+
+                return Ok(new
+                {
+                    result = true,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    data = globalValues
+                });
+            
+           
+        }
+
+
     }
 }
