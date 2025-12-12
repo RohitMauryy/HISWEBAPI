@@ -133,14 +133,16 @@
     {
         public int TabId { get; set; }
         public required string TabName { get; set; }
+        public int FaIconId { get; set; }
         public int IsActive { get; set; }
-      
+
     }
 
     public class NavigationSubMenuMasterModel
     {
         public int SubMenuId { get; set; }
         public int TabId { get; set; }
+        public string TabName { get; set; }
         public string SubMenuName { get; set; }
         public string URL { get; set; }
         public int IsActive { get; set; }
@@ -171,5 +173,19 @@
         public required string TabName { get; set; }
         public int IsActive { get; set; }
     }
+    public class UserWiseCorporateMappingModel
+    {
+        public int IsGranted { get; set; }
+        public int CorporateId { get; set; }
+        public required string CorporateName { get; set; }
+        public int IsActive { get; set; }
+    }
 
+    public class UserWiseBedMappingModel
+    {
+        public int IsGranted { get; set; }
+        public int ServiceItemId { get; set; }
+        public required string Name { get; set; }
+
+    }
 }

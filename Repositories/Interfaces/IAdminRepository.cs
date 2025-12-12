@@ -35,5 +35,9 @@ namespace HISWEBAPI.Repositories.Interfaces
         ServiceResult<IEnumerable<RoleWiseMenuMappingModel>> GetRoleWiseMenuMapping(int branchId, int roleId);
         ServiceResult<string> SaveUpdateUserMenuMaster(SaveUserMenuMasterRequest request, AllGlobalValues globalValues);
         ServiceResult<IEnumerable<UserWiseMenuMasterModel>> GetUserWiseMenuMaster(int branchId, int typeId, int userId, int roleId);
+        ServiceResult<string> SaveUpdateUserCorporateMapping(SaveUserCorporateMappingRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<UserWiseCorporateMappingModel>> GetUserWiseCorporateMapping(int branchId, int typeId, int userId);
+        ServiceResult<string> SaveUpdateUserBedMapping(SaveUserBedMappingRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<UserWiseBedMappingModel>> GetUserWiseBedMapping(int branchId, int typeId, int userId);
     }
 }

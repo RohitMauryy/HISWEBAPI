@@ -707,7 +707,7 @@ namespace HISWEBAPI.Controllers
         {
             _log.Info($"GetAssignUserRightMapping called. BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
 
-            if (branchId <= 0 || typeId <= 0 || userId <= 0 || roleId <= 0)
+            if (branchId <= 0 || typeId <= 0 || userId <= 0)
             {
                 _log.Warn("Invalid parameters for GetAssignUserRightMapping.");
                 var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
@@ -715,7 +715,7 @@ namespace HISWEBAPI.Controllers
                 {
                     result = false,
                     messageType = alert.Type,
-                    message = "All parameters (branchId, typeId, userId, roleId) must be greater than 0",
+                    message = "All parameters (branchId, typeId, userId) must be greater than 0",
                     errors = new { branchId, typeId, userId, roleId }
                 });
             }
@@ -788,7 +788,7 @@ namespace HISWEBAPI.Controllers
         {
             _log.Info($"GetAssignDashBoardUserRight called. BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
 
-            if (branchId <= 0 || typeId <= 0 || userId <= 0 || roleId <= 0)
+            if (branchId <= 0 || typeId <= 0 || userId <= 0 )
             {
                 _log.Warn("Invalid parameters for GetAssignDashBoardUserRight.");
                 var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
@@ -796,7 +796,7 @@ namespace HISWEBAPI.Controllers
                 {
                     result = false,
                     messageType = alert.Type,
-                    message = "All parameters (branchId, typeId, userId, roleId) must be greater than 0",
+                    message = "All parameters (branchId, typeId, userId) must be greater than 0",
                     errors = new { branchId, typeId, userId, roleId }
                 });
             }
@@ -1148,9 +1148,9 @@ namespace HISWEBAPI.Controllers
         [FromQuery] int userId,
         [FromQuery] int roleId)
         {
-            _log.Info($"GetUserWiseMenuMaster called. BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
+            _log.Info($"GetUserWiseMenuMaster called. BranchId={branchId}, TypeId={typeId}, UserId={userId},RoleId={roleId}");
 
-            if (branchId <= 0 || typeId <= 0 || userId <= 0 || roleId <= 0)
+            if (branchId <= 0 || typeId <= 0 || userId <= 0)
             {
                 _log.Warn("Invalid parameters for GetUserWiseMenuMaster.");
                 var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
@@ -1158,8 +1158,8 @@ namespace HISWEBAPI.Controllers
                 {
                     result = false,
                     messageType = alert.Type,
-                    message = "All parameters (branchId, typeId, userId, roleId) must be greater than 0",
-                    errors = new { branchId, typeId, userId, roleId }
+                    message = "All parameters (branchId, typeId, userId) must be greater than 0",
+                    errors = new { branchId, typeId, userId , roleId }
                 });
             }
 
@@ -1180,8 +1180,228 @@ namespace HISWEBAPI.Controllers
         }
 
 
+        [HttpPost("saveUpdateUserCorporateMapping")]
+        [Authorize]
+        public IActionResult SaveUpdateUserCorporateMapping([FromBody] SaveUserCorporateMappingRequest request)
+        {
+            _log.Info($"SaveUpdateUserCorporateMapping called. TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}, IsFirst={request.IsFirst}, UserCorporates Count={request.UserCorporates.Count}");
 
-       
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for SaveUpdateUserCorporateMapping.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
 
+            // Validate IsFirst parameter
+            if (request.IsFirst != 0 && request.IsFirst != 1)
+            {
+                _log.Warn($"Invalid IsFirst parameter: {request.IsFirst}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsFirst must be either 0 or 1",
+                    errors = new { IsFirst = request.IsFirst }
+                });
+            }
+
+            // Validate that all items (if any exist) have the same typeId, userId, and branchId as the parent request
+            if (request.UserCorporates != null && request.UserCorporates.Count > 0)
+            {
+                bool isConsistent = request.UserCorporates.All(x =>
+                    x.TypeId == request.TypeId &&
+                    x.UserId == request.UserId &&
+                    x.BranchId == request.BranchId);
+
+                if (!isConsistent)
+                {
+                    _log.Warn("Inconsistent typeId, userId, or branchId in user corporate mapping list.");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    return BadRequest(new
+                    {
+                        result = false,
+                        messageType = alert.Type,
+                        message = "All user corporate mapping items must have the same typeId, userId, and branchId as the request"
+                    });
+                }
+
+                _log.Info($"Saving user corporate mapping for TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}, Count={request.UserCorporates.Count}");
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+
+            var serviceResult = _adminRepository.SaveUpdateUserCorporateMapping(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"User corporate mapping saved successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"User corporate mapping save failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getUserWiseCorporateMapping")]
+        [Authorize]
+        public IActionResult GetUserWiseCorporateMapping(
+            [FromQuery] int branchId,
+            [FromQuery] int typeId,
+            [FromQuery] int userId)
+        {
+            _log.Info($"GetUserWiseCorporateMapping called. BranchId={branchId}, TypeId={typeId}, UserId={userId}");
+
+            if (branchId <= 0 || typeId <= 0 || userId <= 0)
+            {
+                _log.Warn("Invalid parameters for GetUserWiseCorporateMapping.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "All parameters (branchId, typeId, userId) must be greater than 0",
+                    errors = new { branchId, typeId, userId }
+                });
+            }
+
+            var serviceResult = _adminRepository.GetUserWiseCorporateMapping(branchId, typeId, userId);
+
+            if (serviceResult.Result)
+                _log.Info($"User corporate mapping (granted + remaining) fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"User corporate mapping fetch failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpPost("saveUpdateUserBedMapping")]
+        [Authorize]
+        public IActionResult SaveUpdateUserBedMapping([FromBody] SaveUserBedMappingRequest request)
+        {
+            _log.Info($"SaveUpdateUserBedMapping called. TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}, IsFirst={request.IsFirst}, UserBeds Count={request.UserBeds.Count}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for SaveUpdateUserBedMapping.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Validate IsFirst parameter
+            if (request.IsFirst != 0 && request.IsFirst != 1)
+            {
+                _log.Warn($"Invalid IsFirst parameter: {request.IsFirst}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsFirst must be either 0 or 1",
+                    errors = new { IsFirst = request.IsFirst }
+                });
+            }
+
+            // Validate that all items (if any exist) have the same typeId, userId, and branchId as the parent request
+            if (request.UserBeds != null && request.UserBeds.Count > 0)
+            {
+                bool isConsistent = request.UserBeds.All(x =>
+                    x.TypeId == request.TypeId &&
+                    x.UserId == request.UserId &&
+                    x.BranchId == request.BranchId);
+
+                if (!isConsistent)
+                {
+                    _log.Warn("Inconsistent typeId, userId, or branchId in user bed mapping list.");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    return BadRequest(new
+                    {
+                        result = false,
+                        messageType = alert.Type,
+                        message = "All user bed mapping items must have the same typeId, userId, and branchId as the request"
+                    });
+                }
+
+                _log.Info($"Saving user bed mapping for TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}, Count={request.UserBeds.Count}");
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+
+            var serviceResult = _adminRepository.SaveUpdateUserBedMapping(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"User bed mapping saved successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"User bed mapping save failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getUserWiseBedMapping")]
+        [Authorize]
+        public IActionResult GetUserWiseBedMapping(
+            [FromQuery] int branchId,
+            [FromQuery] int typeId,
+            [FromQuery] int userId)
+        {
+            _log.Info($"GetUserWiseBedMapping called. BranchId={branchId}, TypeId={typeId}, UserId={userId}");
+
+            if (branchId <= 0 || typeId <= 0 || userId <= 0)
+            {
+                _log.Warn("Invalid parameters for GetUserWiseBedMapping.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "All parameters (branchId, typeId, userId) must be greater than 0",
+                    errors = new { branchId, typeId, userId }
+                });
+            }
+
+            var serviceResult = _adminRepository.GetUserWiseBedMapping(branchId, typeId, userId);
+
+            if (serviceResult.Result)
+                _log.Info($"User bed mapping (granted + remaining) fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"User bed mapping fetch failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
     }
 }

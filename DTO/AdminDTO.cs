@@ -134,7 +134,6 @@ namespace HISWEBAPI.DTO
         public int GroupId { get; set; }
 
         [Required(ErrorMessage = "UserIds are required")]
-        [MinLength(1, ErrorMessage = "At least one user must be selected")]
         public required List<int> UserIds { get; set; }
     }
 
@@ -368,6 +367,94 @@ namespace HISWEBAPI.DTO
 
         [Required(ErrorMessage = "RoleId is required")]
         public int RoleId { get; set; }
+    }
+
+    public class UserCorporateMappingRequest
+    {
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "CorporateId is required")]
+        public int CorporateId { get; set; }
+    }
+
+    public class SaveUserCorporateMappingRequest
+    {
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "IsFirst is required")]
+        public int IsFirst { get; set; }
+
+        public List<UserCorporateMappingRequest> UserCorporates { get; set; } = new List<UserCorporateMappingRequest>();
+    }
+
+    public class GetUserWiseCorporateMappingRequest
+    {
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
+    }
+
+    public class UserBedMappingRequest
+    {
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "ServiceItemId is required")]
+        public int ServiceItemId { get; set; }
+    }
+
+    public class SaveUserBedMappingRequest
+    {
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "IsFirst is required")]
+        public int IsFirst { get; set; }
+
+        public List<UserBedMappingRequest> UserBeds { get; set; } = new List<UserBedMappingRequest>();
+    }
+
+    public class GetUserWiseBedMappingRequest
+    {
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
     }
 
 }

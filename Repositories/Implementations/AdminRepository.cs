@@ -1630,9 +1630,9 @@ namespace HISWEBAPI.Repositories.Implementations
             new SqlParameter("@CreatedOn", globalValues.userId),
             new SqlParameter("@Result", SqlDbType.Int) { Direction = ParameterDirection.Output }
                 };
-
                 int result = (int)_sqlHelper.RunProcedureInsert("IU_NavigationTabMaster", parameters);
 
+                _distributedCache.Remove("_NavigationTabMaster_All");
                 if (result == -1)
                 {
                     var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
@@ -1714,6 +1714,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     {
                         TabId = row.Field<int>("TabId"),
                         TabName = row.Field<string>("TabName") ?? string.Empty,
+                        FaIconId = row.Field<int>("FaIconId"),
                         IsActive = row.Field<int>("IsActive")
                     }).ToList() ?? new List<NavigationTabMasterModel>();
 
@@ -1854,6 +1855,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 {
                     SubMenuId = row.Field<int>("SubMenuId"),
                     TabId = row.Field<int>("TabId"),
+                    TabName = row.Field<string>("TabName") ?? string.Empty,
                     SubMenuName = row.Field<string>("SubMenuName") ?? string.Empty,
                     URL = row.Field<string>("URL") ?? string.Empty,
                     IsActive = row.Field<int>("IsActive"),
@@ -1902,8 +1904,8 @@ namespace HISWEBAPI.Repositories.Implementations
 
 
         public ServiceResult<string> SaveUpdateRoleWiseMenuMapping(
-      SaveRoleWiseMenuMappingRequest request,
-      AllGlobalValues globalValues)
+            SaveRoleWiseMenuMappingRequest request,
+            AllGlobalValues globalValues)
         {
             try
             {
@@ -1923,9 +1925,16 @@ namespace HISWEBAPI.Repositories.Implementations
                     _log.Info($"Deleted existing role-wise menu mappings for BranchId={request.BranchId}, RoleId={request.RoleId}");
                 }
 
+                // Generate cache key for this specific mapping
+                string cacheKey = $"_RoleWiseMenuMapping_{request.BranchId}_{request.RoleId}";
+
                 // If MenuMappings list is empty or null, only delete operation was needed
                 if (request.MenuMappings == null || !request.MenuMappings.Any())
                 {
+                    // Clear cache after delete
+                    _distributedCache.Remove(cacheKey);
+                    _log.Info($"Cleared cache for key: {cacheKey}");
+
                     var alert = _messageService.GetMessageAndTypeByAlertCode(
                         request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
                     );
@@ -1944,6 +1953,10 @@ namespace HISWEBAPI.Repositories.Implementations
 
                 if (!validMenuMappings.Any())
                 {
+                    // Clear cache
+                    _distributedCache.Remove(cacheKey);
+                    _log.Info($"Cleared cache for key: {cacheKey}");
+
                     var alert = _messageService.GetMessageAndTypeByAlertCode(
                         request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
                     );
@@ -1998,6 +2011,10 @@ namespace HISWEBAPI.Repositories.Implementations
                     }
                 }
 
+                // Clear cache after successful operation
+                _distributedCache.Remove(cacheKey);
+                _log.Info($"Cleared cache for key: {cacheKey}");
+
                 _log.Info($"Inserted {insertedCount} role-wise menu mappings for RoleId={request.RoleId}");
 
                 var alert1 = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
@@ -2021,30 +2038,63 @@ namespace HISWEBAPI.Repositories.Implementations
         }
 
         public ServiceResult<IEnumerable<RoleWiseMenuMappingModel>> GetRoleWiseMenuMapping(
-           int branchId,
-           int roleId)
+            int branchId,
+            int roleId)
         {
             try
             {
-                var dataTable = _sqlHelper.GetDataTable(
-                    "S_RoleWiseMenuMappingMaster",
-                    CommandType.StoredProcedure,
-                    new
-                    {
-                        @BranchId = branchId,
-                        @RoleId = roleId
-                    }
-                );
+                _log.Info($"GetRoleWiseMenuMapping called. BranchId={branchId}, RoleId={roleId}");
 
-                var menuMappings = dataTable?.AsEnumerable().Select(row => new RoleWiseMenuMappingModel
+                // Generate dynamic cache key based on branchId and roleId
+                string cacheKey = $"_RoleWiseMenuMapping_{branchId}_{roleId}";
+
+                // Try to get data from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<RoleWiseMenuMappingModel> menuMappings;
+
+                if (!string.IsNullOrEmpty(cachedData))
                 {
-                    IsGranted = row.Field<int>("isGranted"),
-                    SubMenuId = row.Field<int>("SubMenuId"),
-                    TabId = row.Field<int>("TabId"),
-                    SubMenuName = row.Field<string>("SubMenuName") ?? string.Empty,
-                    TabName = row.Field<string>("TabName") ?? string.Empty,
-                    IsActive = row.Field<int>("IsActive")
-                }).ToList() ?? new List<RoleWiseMenuMappingModel>();
+                    _log.Info($"RoleWiseMenuMapping data retrieved from cache. Key={cacheKey}");
+                    menuMappings = System.Text.Json.JsonSerializer.Deserialize<List<RoleWiseMenuMappingModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"RoleWiseMenuMapping cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_RoleWiseMenuMappingMaster",
+                        CommandType.StoredProcedure,
+                        new
+                        {
+                            @BranchId = branchId,
+                            @RoleId = roleId
+                        }
+                    );
+
+                    menuMappings = dataTable?.AsEnumerable().Select(row => new RoleWiseMenuMappingModel
+                    {
+                        IsGranted = row.Field<int>("isGranted"),
+                        SubMenuId = row.Field<int>("SubMenuId"),
+                        TabId = row.Field<int>("TabId"),
+                        SubMenuName = row.Field<string>("SubMenuName") ?? string.Empty,
+                        TabName = row.Field<string>("TabName") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive")
+                    }).ToList() ?? new List<RoleWiseMenuMappingModel>();
+
+                    // Store data in cache with no expiration
+                    if (menuMappings.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(menuMappings);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"RoleWiseMenuMapping data cached permanently. Key={cacheKey}, Count={menuMappings.Count}");
+                    }
+                }
 
                 if (!menuMappings.Any())
                 {
@@ -2058,7 +2108,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     );
                 }
 
-                _log.Info($"Retrieved {menuMappings.Count} role-wise menu mapping records");
+                _log.Info($"Retrieved {menuMappings.Count} role-wise menu mapping records from cache");
 
                 return ServiceResult<IEnumerable<RoleWiseMenuMappingModel>>.Success(
                     menuMappings,
@@ -2079,8 +2129,6 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-
-      
         public ServiceResult<string> SaveUpdateUserMenuMaster(
             SaveUserMenuMasterRequest request,
             AllGlobalValues globalValues)
@@ -2105,9 +2153,16 @@ namespace HISWEBAPI.Repositories.Implementations
                     _log.Info($"Deleted existing user menu for TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}, RoleId={request.RoleId}");
                 }
 
+                // Generate cache key for this specific user menu mapping
+                string cacheKey = $"_UserWiseMenuMapping_{request.BranchId}_{request.TypeId}_{request.UserId}_{request.RoleId}";
+
                 // If UserMenus list is empty or null, only delete operation was needed
                 if (request.UserMenus == null || !request.UserMenus.Any())
                 {
+                    // Clear cache after delete
+                    _distributedCache.Remove(cacheKey);
+                    _log.Info($"Cleared cache for key: {cacheKey}");
+
                     var alert = _messageService.GetMessageAndTypeByAlertCode(
                         request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
                     );
@@ -2126,6 +2181,10 @@ namespace HISWEBAPI.Repositories.Implementations
 
                 if (!validUserMenus.Any())
                 {
+                    // Clear cache
+                    _distributedCache.Remove(cacheKey);
+                    _log.Info($"Cleared cache for key: {cacheKey}");
+
                     var alert = _messageService.GetMessageAndTypeByAlertCode(
                         request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
                     );
@@ -2184,6 +2243,10 @@ namespace HISWEBAPI.Repositories.Implementations
                     }
                 }
 
+                // Clear cache after successful operation
+                _distributedCache.Remove(cacheKey);
+                _log.Info($"Cleared cache for key: {cacheKey}");
+
                 _log.Info($"Inserted {insertedCount} user menu records for UserId={request.UserId}");
 
                 var alert1 = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
@@ -2207,34 +2270,67 @@ namespace HISWEBAPI.Repositories.Implementations
         }
 
         public ServiceResult<IEnumerable<UserWiseMenuMasterModel>> GetUserWiseMenuMaster(
-     int branchId,
-     int typeId,
-     int userId,
-     int roleId)
+            int branchId,
+            int typeId,
+            int userId,
+            int roleId)
         {
             try
             {
-                var dataTable = _sqlHelper.GetDataTable(
-                    "S_UserWiseMenuMaster",
-                    CommandType.StoredProcedure,
-                    new
-                    {
-                        @BranchId = branchId,
-                        @TypeId = typeId,
-                        @UserId = userId,
-                        @RoleId = roleId
-                    }
-                );
+                _log.Info($"GetUserWiseMenuMaster called. BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
 
-                var userMenus = dataTable?.AsEnumerable().Select(row => new UserWiseMenuMasterModel
+                // Generate dynamic cache key based on branchId, typeId, userId, and roleId
+                string cacheKey = $"_UserWiseMenuMapping_{branchId}_{typeId}_{userId}_{roleId}";
+
+                // Try to get data from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<UserWiseMenuMasterModel> userMenus;
+
+                if (!string.IsNullOrEmpty(cachedData))
                 {
-                    IsGranted = row.Field<int>("isGranted"),
-                    SubMenuId = row.Field<int>("SubMenuId"),
-                    TabId = row.Field<int>("TabId"),
-                    SubMenuName = row.Field<string>("SubMenuName") ?? string.Empty,
-                    TabName = row.Field<string>("TabName") ?? string.Empty,
-                    IsActive = row.Field<int>("IsActive")
-                }).ToList() ?? new List<UserWiseMenuMasterModel>();
+                    _log.Info($"UserWiseMenuMaster data retrieved from cache. Key={cacheKey}");
+                    userMenus = System.Text.Json.JsonSerializer.Deserialize<List<UserWiseMenuMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"UserWiseMenuMaster cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_UserWiseMenuMaster",
+                        CommandType.StoredProcedure,
+                        new
+                        {
+                            @BranchId = branchId,
+                            @TypeId = typeId,
+                            @UserId = userId,
+                            @RoleId = roleId
+                        }
+                    );
+
+                    userMenus = dataTable?.AsEnumerable().Select(row => new UserWiseMenuMasterModel
+                    {
+                        IsGranted = row.Field<int>("isGranted"),
+                        SubMenuId = row.Field<int>("SubMenuId"),
+                        TabId = row.Field<int>("TabId"),
+                        SubMenuName = row.Field<string>("SubMenuName") ?? string.Empty,
+                        TabName = row.Field<string>("TabName") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive")
+                    }).ToList() ?? new List<UserWiseMenuMasterModel>();
+
+                    // Store data in cache with no expiration
+                    if (userMenus.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(userMenus);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"UserWiseMenuMaster data cached permanently. Key={cacheKey}, Count={userMenus.Count}");
+                    }
+                }
 
                 if (!userMenus.Any())
                 {
@@ -2248,7 +2344,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     );
                 }
 
-                _log.Info($"Retrieved {userMenus.Count} user-wise menu records (Granted + Remaining)");
+                _log.Info($"Retrieved {userMenus.Count} user-wise menu records (Granted + Remaining) from cache");
 
                 return ServiceResult<IEnumerable<UserWiseMenuMasterModel>>.Success(
                     userMenus,
@@ -2269,7 +2365,462 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-     
-       
+        public ServiceResult<string> SaveUpdateUserCorporateMapping(
+     SaveUserCorporateMappingRequest request,
+     AllGlobalValues globalValues)
+        {
+            try
+            {
+                // Delete existing user corporate mappings if IsFirst = 1
+                if (request.IsFirst == 1)
+                {
+                    var deleteResult = _sqlHelper.DML("D_DeleteUserCorporateMapping", CommandType.StoredProcedure, new
+                    {
+                        @TypeId = request.TypeId,
+                        @UserId = request.UserId,
+                        @BranchId = request.BranchId
+                    },
+                    new
+                    {
+                        result = 0
+                    });
+
+                    _log.Info($"Deleted existing user corporate mapping for TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}");
+                }
+
+                // If UserCorporates list is empty or null, only delete operation was needed
+                if (request.UserCorporates == null || !request.UserCorporates.Any())
+                {
+                    // Clear cache after delete
+                    string cacheKey = $"_UserCorporateMapping_{request.BranchId}_{request.TypeId}_{request.UserId}";
+                    _distributedCache.Remove(cacheKey);
+                    _log.Info($"Cleared cache for key: {cacheKey}");
+
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
+                    );
+                    _log.Info("User corporate mapping operation completed. No new mappings to insert.");
+
+                    return ServiceResult<string>.Success(
+                        request.IsFirst == 1 ? "User corporate mappings deleted successfully" : "No corporate mappings to save",
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+
+                // Filter out items with CorporateId = 0
+                var validUserCorporates = request.UserCorporates.Where(uc => uc.CorporateId != 0).ToList();
+
+                if (!validUserCorporates.Any())
+                {
+                    // Clear cache
+                    string cacheKey = $"_UserCorporateMapping_{request.BranchId}_{request.TypeId}_{request.UserId}";
+                    _distributedCache.Remove(cacheKey);
+                    _log.Info($"Cleared cache for key: {cacheKey}");
+
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
+                    );
+                    _log.Info("User corporate mapping operation completed. No valid mappings to insert.");
+
+                    return ServiceResult<string>.Success(
+                        request.IsFirst == 1 ? "User corporate mappings deleted successfully" : "No valid corporate mappings to save",
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+
+                // Validate consistency of all items with parent request
+                bool isConsistent = validUserCorporates.All(x =>
+                    x.TypeId == request.TypeId &&
+                    x.UserId == request.UserId &&
+                    x.BranchId == request.BranchId);
+
+                if (!isConsistent)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    _log.Warn("Inconsistent TypeId, UserId, or BranchId in user corporate mapping list.");
+
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        "All user corporate mapping items must have the same TypeId, UserId, and BranchId as the request",
+                        400
+                    );
+                }
+
+                // Insert new user corporate mappings
+                int insertedCount = 0;
+                foreach (var userCorporate in validUserCorporates)
+                {
+                    var result = _sqlHelper.DML("IU_UserCorporateMapping", CommandType.StoredProcedure, new
+                    {
+                        @hospId = globalValues.hospId,
+                        @TypeId = userCorporate.TypeId,
+                        @UserId = userCorporate.UserId,
+                        @BranchId = userCorporate.BranchId,
+                        @CorporateId = userCorporate.CorporateId,
+                        @CreatedBy = globalValues.userId,
+                        @IpAddress = globalValues.ipAddress
+                    },
+                    new
+                    {
+                        result = 0
+                    });
+
+                    if (result > 0)
+                    {
+                        insertedCount++;
+                    }
+                }
+
+                // Clear cache after successful operation
+                string clearCacheKey = $"_UserCorporateMapping_{request.BranchId}_{request.TypeId}_{request.UserId}";
+                _distributedCache.Remove(clearCacheKey);
+                _log.Info($"Cleared cache for key: {clearCacheKey}");
+
+                _log.Info($"Inserted {insertedCount} user corporate mapping records for UserId={request.UserId}");
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
+                return ServiceResult<string>.Success(
+                    $"User corporate mapping updated successfully. {insertedCount} corporate(s) assigned.",
+                    alert1.Type,
+                    alert1.Message,
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<string>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<UserWiseCorporateMappingModel>> GetUserWiseCorporateMapping(
+            int branchId,
+            int typeId,
+            int userId)
+        {
+            try
+            {
+                _log.Info($"GetUserWiseCorporateMapping called. BranchId={branchId}, TypeId={typeId}, UserId={userId}");
+
+                // Generate dynamic cache key based on branchId, typeId, and userId
+                string cacheKey = $"_UserCorporateMapping_{branchId}_{typeId}_{userId}";
+
+                // Try to get data from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<UserWiseCorporateMappingModel> userCorporates;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"UserCorporateMapping data retrieved from cache. Key={cacheKey}");
+                    userCorporates = System.Text.Json.JsonSerializer.Deserialize<List<UserWiseCorporateMappingModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"UserCorporateMapping cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetRemainingAssignCorporateForUserAuthorization",
+                        CommandType.StoredProcedure,
+                        new
+                        {
+                            @BranchId = branchId,
+                            @TypeId = typeId,
+                            @UserId = userId
+                        }
+                    );
+
+                    userCorporates = dataTable?.AsEnumerable().Select(row => new UserWiseCorporateMappingModel
+                    {
+                        IsGranted = row.Field<int>("isGranted"),
+                        CorporateId = row.Field<int>("CorporateId"),
+                        CorporateName = row.Field<string>("CorporateName") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive")
+                    }).ToList() ?? new List<UserWiseCorporateMappingModel>();
+
+                    // Store data in cache with no expiration
+                    if (userCorporates.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(userCorporates);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"UserCorporateMapping data cached permanently. Key={cacheKey}, Count={userCorporates.Count}");
+                    }
+                }
+
+                if (!userCorporates.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No user corporate mapping found for BranchId={branchId}, TypeId={typeId}, UserId={userId}");
+
+                    return ServiceResult<IEnumerable<UserWiseCorporateMappingModel>>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {userCorporates.Count} user corporate mapping records (Granted + Remaining) from cache");
+
+                return ServiceResult<IEnumerable<UserWiseCorporateMappingModel>>.Success(
+                    userCorporates,
+                    "Info",
+                    $"{userCorporates.Count} user corporate mapping(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<UserWiseCorporateMappingModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
+        public ServiceResult<string> SaveUpdateUserBedMapping(
+    SaveUserBedMappingRequest request,
+    AllGlobalValues globalValues)
+        {
+            try
+            {
+                // Delete existing user bed mappings if IsFirst = 1
+                if (request.IsFirst == 1)
+                {
+                    var deleteResult = _sqlHelper.DML("D_DeleteUserBedMapping", CommandType.StoredProcedure, new
+                    {
+                        @TypeId = request.TypeId,
+                        @UserId = request.UserId,
+                        @BranchId = request.BranchId
+                    },
+                    new
+                    {
+                        result = 0
+                    });
+
+                    _log.Info($"Deleted existing user bed mapping for TypeId={request.TypeId}, UserId={request.UserId}, BranchId={request.BranchId}");
+                }
+
+                // Generate cache key for this specific bed mapping
+                string cacheKey = $"_UserBedMapping_{request.BranchId}_{request.TypeId}_{request.UserId}";
+
+                // If UserBeds list is empty or null, only delete operation was needed
+                if (request.UserBeds == null || !request.UserBeds.Any())
+                {
+                    // Clear cache after delete
+                    _distributedCache.Remove(cacheKey);
+                    _log.Info($"Cleared cache for key: {cacheKey}");
+
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
+                    );
+                    _log.Info("User bed mapping operation completed. No new mappings to insert.");
+
+                    return ServiceResult<string>.Success(
+                        request.IsFirst == 1 ? "User bed mappings deleted successfully" : "No bed mappings to save",
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+
+                // Filter out items with ServiceItemId = 0
+                var validUserBeds = request.UserBeds.Where(ub => ub.ServiceItemId != 0).ToList();
+
+                if (!validUserBeds.Any())
+                {
+                    // Clear cache
+                    _distributedCache.Remove(cacheKey);
+                    _log.Info($"Cleared cache for key: {cacheKey}");
+
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
+                    );
+                    _log.Info("User bed mapping operation completed. No valid mappings to insert.");
+
+                    return ServiceResult<string>.Success(
+                        request.IsFirst == 1 ? "User bed mappings deleted successfully" : "No valid bed mappings to save",
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+
+                // Validate consistency of all items with parent request
+                bool isConsistent = validUserBeds.All(x =>
+                    x.TypeId == request.TypeId &&
+                    x.UserId == request.UserId &&
+                    x.BranchId == request.BranchId);
+
+                if (!isConsistent)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    _log.Warn("Inconsistent TypeId, UserId, or BranchId in user bed mapping list.");
+
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        "All user bed mapping items must have the same TypeId, UserId, and BranchId as the request",
+                        400
+                    );
+                }
+
+                // Insert new user bed mappings
+                int insertedCount = 0;
+                foreach (var userBed in validUserBeds)
+                {
+                    var result = _sqlHelper.DML("IU_UserBedMapping", CommandType.StoredProcedure, new
+                    {
+                        @hospId = globalValues.hospId,
+                        @TypeId = userBed.TypeId,
+                        @UserId = userBed.UserId,
+                        @BranchId = userBed.BranchId,
+                        @ServiceItemId = userBed.ServiceItemId,
+                        @CreatedBy = globalValues.userId,
+                        @IpAddress = globalValues.ipAddress
+                    },
+                    new
+                    {
+                        result = 0
+                    });
+
+                    if (result > 0)
+                    {
+                        insertedCount++;
+                    }
+                }
+
+                // Clear cache after successful operation
+                _distributedCache.Remove(cacheKey);
+                _log.Info($"Cleared cache for key: {cacheKey}");
+
+                _log.Info($"Inserted {insertedCount} user bed mapping records for UserId={request.UserId}");
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
+                return ServiceResult<string>.Success(
+                    $"User bed mapping updated successfully. {insertedCount} bed(s) assigned.",
+                    alert1.Type,
+                    alert1.Message,
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<string>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<UserWiseBedMappingModel>> GetUserWiseBedMapping(
+            int branchId,
+            int typeId,
+            int userId)
+        {
+            try
+            {
+                _log.Info($"GetUserWiseBedMapping called. BranchId={branchId}, TypeId={typeId}, UserId={userId}");
+
+                // Generate dynamic cache key based on branchId, typeId, and userId
+                string cacheKey = $"_UserBedMapping_{branchId}_{typeId}_{userId}";
+
+                // Try to get data from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<UserWiseBedMappingModel> userBeds;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"UserBedMapping data retrieved from cache. Key={cacheKey}");
+                    userBeds = System.Text.Json.JsonSerializer.Deserialize<List<UserWiseBedMappingModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"UserBedMapping cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetRemainingAssignBedForUserAuthorization",
+                        CommandType.StoredProcedure,
+                        new
+                        {
+                            @BranchId = branchId,
+                            @TypeId = typeId,
+                            @UserId = userId
+                        }
+                    );
+
+                    userBeds = dataTable?.AsEnumerable().Select(row => new UserWiseBedMappingModel
+                    {
+                        IsGranted = row.Field<int>("isGranted"),
+                        ServiceItemId = row.Field<int>("ServiceItemId"),
+                        Name = row.Field<string>("Name") ?? string.Empty,
+                    }).ToList() ?? new List<UserWiseBedMappingModel>();
+
+                    // Store data in cache with no expiration
+                    if (userBeds.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(userBeds);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"UserBedMapping data cached permanently. Key={cacheKey}, Count={userBeds.Count}");
+                    }
+                }
+
+                if (!userBeds.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No user bed mapping found for BranchId={branchId}, TypeId={typeId}, UserId={userId}");
+
+                    return ServiceResult<IEnumerable<UserWiseBedMappingModel>>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {userBeds.Count} user bed mapping records (Granted + Remaining) from cache");
+
+                return ServiceResult<IEnumerable<UserWiseBedMappingModel>>.Success(
+                    userBeds,
+                    "Info",
+                    $"{userBeds.Count} user bed mapping(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<UserWiseBedMappingModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
     }
 }
