@@ -457,4 +457,116 @@ namespace HISWEBAPI.DTO
         public int UserId { get; set; }
     }
 
+    public class BranchMasterRequest
+    {
+        public int BranchId { get; set; } = 0;
+
+        [Required(ErrorMessage = "Branch name is required")]
+        [StringLength(256, ErrorMessage = "Branch name cannot exceed 256 characters")]
+        public string BranchName { get; set; }
+
+        [Required(ErrorMessage = "Branch code is required")]
+        [StringLength(10, ErrorMessage = "Branch code cannot exceed 10 characters")]
+        public string BranchCode { get; set; }
+
+        [EmailAddress(ErrorMessage = "Invalid email format")]
+        [StringLength(100)]
+        public string Email { get; set; }
+
+        [Required(ErrorMessage = "Contact number 1 is required")]
+        [StringLength(15)]
+        [RegularExpression(@"^\d{10}$", ErrorMessage = "Contact must be exactly 10 digits")]
+        public string ContactNo1 { get; set; }
+
+        [StringLength(15)]
+        public string ContactNo2 { get; set; }
+
+        public string Address { get; set; }
+
+        [Required(ErrorMessage = "IsActive is required")]
+        public int IsActive { get; set; }
+
+        [Required(ErrorMessage = "Financial year start is required")]
+        [StringLength(20)]
+        public string FYStartFrom { get; set; }
+
+        [Required(ErrorMessage = "Default country is required")]
+        public int DefaultCountryId { get; set; }
+
+        [Required(ErrorMessage = "Default state is required")]
+        public int DefaultStateId { get; set; }
+
+        [Required(ErrorMessage = "Default district is required")]
+        public int DefaultDistrictId { get; set; }
+
+        [Required(ErrorMessage = "Default city is required")]
+        public int DefaultCityId { get; set; }
+
+        public int DefaultInsuranceCompanyId { get; set; }
+
+        public int DefaultCorporateId { get; set; }
+    }
+
+    public class BranchMasterResponse
+    {
+        public int BranchId { get; set; }
+    }
+
+    public class CreateUpdateStateMasterRequest
+    {
+        public int StateId { get; set; } = 0; // 0 or empty = create, >0 = update
+
+        [Required(ErrorMessage = "CountryId is required")]
+        public int CountryId { get; set; }
+
+        [Required(ErrorMessage = "StateName is required")]
+        [StringLength(100, ErrorMessage = "StateName cannot exceed 100 characters")]
+        public string StateName { get; set; }
+
+        [Required(ErrorMessage = "IsActive is required")]
+        public int IsActive { get; set; }
+    }
+
+    // Create/Update District Master Request
+    public class CreateUpdateDistrictMasterRequest
+    {
+        public int DistrictId { get; set; } = 0; // 0 or empty = create, >0 = update
+
+        [Required(ErrorMessage = "StateId is required")]
+        public int StateId { get; set; }
+
+        [Required(ErrorMessage = "CountryId is required")]
+        public int CountryId { get; set; }
+
+        [Required(ErrorMessage = "DistrictName is required")]
+        [StringLength(100, ErrorMessage = "DistrictName cannot exceed 100 characters")]
+        public string DistrictName { get; set; }
+
+        [Required(ErrorMessage = "IsActive is required")]
+        public int IsActive { get; set; }
+    }
+
+    // Create/Update City Master Request
+    public class CreateUpdateCityMasterRequest
+    {
+        public int CityId { get; set; } = 0; // 0 or empty = create, >0 = update
+
+        [Required(ErrorMessage = "DistrictId is required")]
+        public int DistrictId { get; set; }
+
+        [Required(ErrorMessage = "StateId is required")]
+        public int StateId { get; set; }
+
+        [Required(ErrorMessage = "CountryId is required")]
+        public int CountryId { get; set; }
+
+        [Required(ErrorMessage = "CityName is required")]
+        [StringLength(100, ErrorMessage = "CityName cannot exceed 100 characters")]
+        public string CityName { get; set; }
+
+        public string Pincode { get; set; } 
+
+        [Required(ErrorMessage = "IsActive is required")]
+        public int IsActive { get; set; }
+    }
 }

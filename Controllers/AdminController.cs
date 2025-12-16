@@ -1403,5 +1403,313 @@ namespace HISWEBAPI.Controllers
                 data = serviceResult.Data
             });
         }
+
+        [HttpPost("createUpdateBranchMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateBranchMaster([FromBody] BranchMasterRequest request)
+        {
+            _log.Info($"CreateUpdateBranchMaster called. BranchName={request.BranchName}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for branch insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdateBranchMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Branch operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"Branch operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getBranchDetails")]
+        [Authorize]
+        public IActionResult GetBranchDetails([FromQuery] int? branchId = null)
+        {
+            _log.Info($"GetBranchDetails called. BranchId={branchId?.ToString() ?? "All"}");
+
+            var serviceResult = _adminRepository.GetBranchDetails(branchId);
+
+            if (serviceResult.Result)
+                _log.Info($"Branches fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No branches found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+
+
+        [HttpPost("createUpdateStateMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateStateMaster([FromBody] CreateUpdateStateMasterRequest request)
+        {
+            _log.Info($"CreateUpdateStateMaster called. StateId={request.StateId}, StateName={request.StateName}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for state master insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Additional validation for CountryId
+            if (request.CountryId <= 0)
+            {
+                _log.Warn("Invalid CountryId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "CountryId must be greater than 0",
+                    errors = new { countryId = request.CountryId }
+                });
+            }
+
+            // Validate IsActive value
+            if (request.IsActive != 0 && request.IsActive != 1)
+            {
+                _log.Warn("Invalid IsActive value provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 or 1",
+                    errors = new { isActive = request.IsActive }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdateStateMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"State master operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"State master operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = new { stateId = serviceResult.Data }
+            });
+        }
+
+        [HttpPost("createUpdateDistrictMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateDistrictMaster([FromBody] CreateUpdateDistrictMasterRequest request)
+        {
+            _log.Info($"CreateUpdateDistrictMaster called. DistrictId={request.DistrictId}, DistrictName={request.DistrictName}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for district master insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Additional validation for StateId and CountryId
+            if (request.StateId <= 0)
+            {
+                _log.Warn("Invalid StateId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "StateId must be greater than 0",
+                    errors = new { stateId = request.StateId }
+                });
+            }
+
+            if (request.CountryId <= 0)
+            {
+                _log.Warn("Invalid CountryId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "CountryId must be greater than 0",
+                    errors = new { countryId = request.CountryId }
+                });
+            }
+
+            // Validate IsActive value
+            if (request.IsActive != 0 && request.IsActive != 1)
+            {
+                _log.Warn("Invalid IsActive value provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 or 1",
+                    errors = new { isActive = request.IsActive }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdateDistrictMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"District master operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"District master operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = new { districtId = serviceResult.Data }
+            });
+        }
+
+        [HttpPost("createUpdateCityMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateCityMaster([FromBody] CreateUpdateCityMasterRequest request)
+        {
+            _log.Info($"CreateUpdateCityMaster called. CityId={request.CityId}, CityName={request.CityName}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for city master insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Additional validation for DistrictId, StateId, and CountryId
+            if (request.DistrictId <= 0)
+            {
+                _log.Warn("Invalid DistrictId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "DistrictId must be greater than 0",
+                    errors = new { districtId = request.DistrictId }
+                });
+            }
+
+            if (request.StateId <= 0)
+            {
+                _log.Warn("Invalid StateId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "StateId must be greater than 0",
+                    errors = new { stateId = request.StateId }
+                });
+            }
+
+            if (request.CountryId <= 0)
+            {
+                _log.Warn("Invalid CountryId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "CountryId must be greater than 0",
+                    errors = new { countryId = request.CountryId }
+                });
+            }
+
+            // Validate IsActive value
+            if (request.IsActive != 0 && request.IsActive != 1)
+            {
+                _log.Warn("Invalid IsActive value provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 or 1",
+                    errors = new { isActive = request.IsActive }
+                });
+            }
+
+            // Additional validation for Pincode if provided
+            if (!string.IsNullOrEmpty(request.Pincode))
+            {
+                if (request.Pincode.Length != 6 || !request.Pincode.All(char.IsDigit))
+                {
+                    _log.Warn($"Invalid pincode format: {request.Pincode}");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    return BadRequest(new
+                    {
+                        result = false,
+                        messageType = alert.Type,
+                        message = "Pincode must be exactly 6 digits",
+                        errors = new { pincode = request.Pincode }
+                    });
+                }
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdateCityMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"City master operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"City master operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = new { cityId = serviceResult.Data }
+            });
+        }
     }
 }

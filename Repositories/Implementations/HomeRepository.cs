@@ -5,6 +5,7 @@ using System.Linq;
 using HISWEBAPI.Repositories.Interfaces;
 using HISWEBAPI.Data.Helpers;
 using HISWEBAPI.Models;
+using HISWEBAPI.DTO;
 using HISWEBAPI.Services;
 using Microsoft.Extensions.Logging;
 using HISWEBAPI.Exceptions;
@@ -242,5 +243,525 @@ namespace HISWEBAPI.Repositories.Implementations
         }
 
 
+        public ServiceResult<IEnumerable<CountryMasterModel>> GetCountryMaster(int? isActive)
+        {
+            try
+            {
+                _log.Info($"GetCountryMaster called. IsActive={isActive?.ToString() ?? "All"}");
+
+                // Generate dynamic cache key based on isActive parameter
+                string cacheKey = $"_CountryMaster_{(isActive.HasValue ? isActive.Value.ToString() : "All")}";
+
+                // Try to get data from Redis cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<CountryMasterModel> countries;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"CountryMaster data retrieved from cache. Key={cacheKey}");
+                    countries = System.Text.Json.JsonSerializer.Deserialize<List<CountryMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"CountryMaster cache miss. Fetching data from database. Key={cacheKey}");
+
+                    // Fetch data from database
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetCountryMaster",
+                        CommandType.StoredProcedure,
+                        new { IsActive = isActive }
+                    );
+
+                    countries = dataTable?.AsEnumerable().Select(row => new CountryMasterModel
+                    {
+                        CountryId = row.Field<int>("CountryId"),
+                        CountryName = row.Field<string>("CountryName") ?? string.Empty,
+                        Currency = row.Field<string>("Currency") ?? string.Empty,
+                        ConversionFactor = row.Field<decimal?>("ConversionFactor"),
+                        IsActive = row.Field<int>("IsActive")
+                    }).ToList() ?? new List<CountryMasterModel>();
+
+                    // Store data in Redis cache (permanent until manually cleared)
+                    if (countries.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(countries);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"CountryMaster data cached permanently. Key={cacheKey}, Count={countries.Count}");
+                    }
+                }
+
+                if (!countries.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No countries found for IsActive: {isActive?.ToString() ?? "All"}");
+                    return ServiceResult<IEnumerable<CountryMasterModel>>.Failure(
+                        alert.Type,
+                        "No countries found",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {countries.Count} country/countries from cache");
+
+                return ServiceResult<IEnumerable<CountryMasterModel>>.Success(
+                    countries,
+                    "Info",
+                    $"{countries.Count} country/countries retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<CountryMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<StateMasterModel>> GetStateMaster(int countryId, int? isActive)
+        {
+            try
+            {
+                _log.Info($"GetStateMaster called. CountryId={countryId}, IsActive={isActive?.ToString() ?? "All"}");
+
+                // Generate dynamic cache key based on countryId and isActive
+                string cacheKey = $"_StateMaster_Country{countryId}_{(isActive.HasValue ? isActive.Value.ToString() : "All")}";
+
+                // Try to get data from Redis cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<StateMasterModel> states;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"StateMaster data retrieved from cache. Key={cacheKey}");
+                    states = System.Text.Json.JsonSerializer.Deserialize<List<StateMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"StateMaster cache miss. Fetching data from database. Key={cacheKey}");
+
+                    // Fetch data from database
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetStateMaster",
+                        CommandType.StoredProcedure,
+                        new { CountryId = countryId, IsActive = isActive }
+                    );
+
+                    states = dataTable?.AsEnumerable().Select(row => new StateMasterModel
+                    {
+                        CountryId = row.Field<int>("CountryId"),
+                        StateId = row.Field<int>("StateId"),
+                        StateName = row.Field<string>("StateName") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive")
+                    }).ToList() ?? new List<StateMasterModel>();
+
+                    // Store data in Redis cache (permanent until manually cleared)
+                    if (states.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(states);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"StateMaster data cached permanently. Key={cacheKey}, Count={states.Count}");
+                    }
+                }
+
+                if (!states.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No states found for CountryId={countryId}, IsActive: {isActive?.ToString() ?? "All"}");
+                    return ServiceResult<IEnumerable<StateMasterModel>>.Failure(
+                        alert.Type,
+                        $"No states found for CountryId: {countryId}",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {states.Count} state(s) from cache");
+
+                return ServiceResult<IEnumerable<StateMasterModel>>.Success(
+                    states,
+                    "Info",
+                    $"{states.Count} state(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<StateMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<DistrictMasterModel>> GetDistrictMaster(int stateId, int? isActive)
+        {
+            try
+            {
+                _log.Info($"GetDistrictMaster called. StateId={stateId}, IsActive={isActive?.ToString() ?? "All"}");
+
+                // Generate dynamic cache key based on stateId and isActive
+                string cacheKey = $"_DistrictMaster_State{stateId}_{(isActive.HasValue ? isActive.Value.ToString() : "All")}";
+
+                // Try to get data from Redis cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<DistrictMasterModel> districts;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"DistrictMaster data retrieved from cache. Key={cacheKey}");
+                    districts = System.Text.Json.JsonSerializer.Deserialize<List<DistrictMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"DistrictMaster cache miss. Fetching data from database. Key={cacheKey}");
+
+                    // Fetch data from database
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetDistrictMaster",
+                        CommandType.StoredProcedure,
+                        new { StateId = stateId, IsActive = isActive }
+                    );
+
+                    districts = dataTable?.AsEnumerable().Select(row => new DistrictMasterModel
+                    {
+                        CountryId = row.Field<int>("CountryId"),
+                        StateId = row.Field<int>("StateId"),
+                        DistrictId = row.Field<int>("DistrictId"),
+                        DistrictName = row.Field<string>("DistrictName") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive")
+                    }).ToList() ?? new List<DistrictMasterModel>();
+
+                    // Store data in Redis cache (permanent until manually cleared)
+                    if (districts.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(districts);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"DistrictMaster data cached permanently. Key={cacheKey}, Count={districts.Count}");
+                    }
+                }
+
+                if (!districts.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No districts found for StateId={stateId}, IsActive: {isActive?.ToString() ?? "All"}");
+                    return ServiceResult<IEnumerable<DistrictMasterModel>>.Failure(
+                        alert.Type,
+                        $"No districts found for StateId: {stateId}",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {districts.Count} district(s) from cache");
+
+                return ServiceResult<IEnumerable<DistrictMasterModel>>.Success(
+                    districts,
+                    "Info",
+                    $"{districts.Count} district(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<DistrictMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<CityMasterModel>> GetCityMaster(int districtId, int? isActive)
+        {
+            try
+            {
+                _log.Info($"GetCityMaster called. DistrictId={districtId}, IsActive={isActive?.ToString() ?? "All"}");
+
+                // Generate dynamic cache key based on districtId and isActive
+                string cacheKey = $"_CityMaster_District{districtId}_{(isActive.HasValue ? isActive.Value.ToString() : "All")}";
+
+                // Try to get data from Redis cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<CityMasterModel> cities;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"CityMaster data retrieved from cache. Key={cacheKey}");
+                    cities = System.Text.Json.JsonSerializer.Deserialize<List<CityMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"CityMaster cache miss. Fetching data from database. Key={cacheKey}");
+
+                    // Fetch data from database
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetCityMaster",
+                        CommandType.StoredProcedure,
+                        new { DistrictId = districtId, IsActive = isActive }
+                    );
+
+                    cities = dataTable?.AsEnumerable().Select(row => new CityMasterModel
+                    {
+                        CountryId = row.Field<int>("CountryId"),
+                        StateId = row.Field<int>("StateId"),
+                        DistrictId = row.Field<int>("DistrictId"),
+                        CityId = row.Field<int>("CityId"),
+                        CityName = row.Field<string>("CityName") ?? string.Empty,
+                        Pincode = row.Field<string>("Pincode") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive")
+                    }).ToList() ?? new List<CityMasterModel>();
+
+                    // Store data in Redis cache (permanent until manually cleared)
+                    if (cities.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(cities);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"CityMaster data cached permanently. Key={cacheKey}, Count={cities.Count}");
+                    }
+                }
+
+                if (!cities.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No cities found for DistrictId={districtId}, IsActive: {isActive?.ToString() ?? "All"}");
+                    return ServiceResult<IEnumerable<CityMasterModel>>.Failure(
+                        alert.Type,
+                        $"No cities found for DistrictId: {districtId}",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {cities.Count} city/cities from cache");
+
+                return ServiceResult<IEnumerable<CityMasterModel>>.Success(
+                    cities,
+                    "Info",
+                    $"{cities.Count} city/cities retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<CityMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<InsuranceCompanyModel>> GetAllInsuranceCompanyList()
+        {
+            try
+            {
+                _log.Info("GetAllInsuranceCompanyList called.");
+
+                // Define cache key
+                string cacheKey = "_InsuranceCompany_All";
+
+                // Try to get data from Redis cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<InsuranceCompanyModel> insuranceCompanies;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"InsuranceCompany data retrieved from cache. Key={cacheKey}");
+                    insuranceCompanies = System.Text.Json.JsonSerializer.Deserialize<List<InsuranceCompanyModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"InsuranceCompany cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetInsuranceCompanyMaster",
+                        CommandType.StoredProcedure
+                    );
+
+                    insuranceCompanies = dataTable?.AsEnumerable().Select(row => new InsuranceCompanyModel
+                    {
+                        InsuranceCompanyId = row.Field<int>("InsuranceCompanyId"),
+                        InsuranceCompanyName = row.Field<string>("InsuranceCompanyName") ?? string.Empty
+                    }).ToList() ?? new List<InsuranceCompanyModel>();
+
+                    // Store data in Redis cache (no expiration - cache persists until manually cleared)
+                    if (insuranceCompanies.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(insuranceCompanies);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"All InsuranceCompany data cached permanently. Key={cacheKey}, Count={insuranceCompanies.Count}");
+                    }
+                }
+
+                if (!insuranceCompanies.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info("No insurance companies found");
+
+                    return ServiceResult<IEnumerable<InsuranceCompanyModel>>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {insuranceCompanies.Count} insurance companies from cache");
+
+                return ServiceResult<IEnumerable<InsuranceCompanyModel>>.Success(
+                    insuranceCompanies,
+                    "Info",
+                    $"{insuranceCompanies.Count} insurance company(ies) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<InsuranceCompanyModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<CorporateModel>> GetCorporateListByInsuranceCompanyId(int? insuranceCompanyId, int? isActive)
+        {
+            try
+            {
+                _log.Info($"GetCorporateListByInsuranceCompanyId called. InsuranceCompanyId={insuranceCompanyId}, IsActive={isActive?.ToString() ?? "All"}");
+
+                // Define cache key - cache ALL corporates together
+                string cacheKey = "_Corporate_All";
+
+                // Try to get all corporates from Redis cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<CorporateModel> allCorporates;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"Corporate data retrieved from cache. Key={cacheKey}");
+                    allCorporates = System.Text.Json.JsonSerializer.Deserialize<List<CorporateModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"Corporate cache miss. Fetching all data from database. Key={cacheKey}");
+
+                    // Fetch ALL corporates from database (no filtering in SP call)
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetCorporateList",
+                        CommandType.StoredProcedure,
+                        new
+                        {
+                           
+                        }
+                    );
+
+                    allCorporates = dataTable?.AsEnumerable().Select(row => new CorporateModel
+                    {
+                        CorporateId = row.Field<int>("CorporateId"),
+                        CorporateName = row.Field<string>("CorporateName") ?? string.Empty,
+                        InsuranceCompanyId = row.Field<int>("InsuranceCompanyId"),
+                        IsActive = row.Field<int>("IsActive")
+                    }).ToList() ?? new List<CorporateModel>();
+
+                    // Store ALL corporates in cache (no expiration)
+                    if (allCorporates.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(allCorporates);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"All Corporate data cached permanently. Key={cacheKey}, Count={allCorporates.Count}");
+                    }
+                }
+
+                // Filter in memory based on parameters (always from cache)
+                List<CorporateModel> filteredCorporates = allCorporates;
+
+                if (insuranceCompanyId.HasValue)
+                {
+                    _log.Info($"Filtering cached data by InsuranceCompanyId: {insuranceCompanyId.Value}");
+                    filteredCorporates = filteredCorporates.Where(c => c.InsuranceCompanyId == insuranceCompanyId.Value).ToList();
+                }
+
+                if (isActive.HasValue)
+                {
+                    _log.Info($"Filtering cached data by IsActive: {isActive.Value}");
+                    filteredCorporates = filteredCorporates.Where(c => c.IsActive == isActive.Value).ToList();
+                }
+
+                if (!filteredCorporates.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No corporates found for InsuranceCompanyId={insuranceCompanyId?.ToString() ?? "All"}, IsActive={isActive?.ToString() ?? "All"}");
+
+                    return ServiceResult<IEnumerable<CorporateModel>>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {filteredCorporates.Count} corporates from cache");
+
+                return ServiceResult<IEnumerable<CorporateModel>>.Success(
+                    filteredCorporates,
+                    "Info",
+                    $"{filteredCorporates.Count} corporate(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<CorporateModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
     }
 }

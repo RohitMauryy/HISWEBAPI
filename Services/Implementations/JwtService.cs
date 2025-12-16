@@ -18,18 +18,20 @@ namespace HISWEBAPI.Services
         }
 
         // Updated to include hospId and branchId
-        public string GenerateToken(string userId, string username, int hospId, int branchId)
+        public string GenerateToken(int userId, string userName, string name, int hospId)
         {
             var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.NameIdentifier, userId),
-                new Claim(ClaimTypes.Name, username),
-                new Claim("userId", userId),  // Custom claim for easier access
-                new Claim("hospId", hospId.ToString()),  // Add hospId
-                new Claim("branchId", branchId.ToString()),  // Add branchId
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new Claim(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString())
+                    new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+                    new Claim("userName", userName),
+                    new Claim("name", name),
+                    new Claim("userId", userId.ToString()),
+                    new Claim("hospId", hospId.ToString()),
+                    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                    new Claim(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString())
             };
+                            
+
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.SecretKey));
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -45,13 +47,7 @@ namespace HISWEBAPI.Services
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        public string GenerateRefreshToken()
-        {
-            var randomNumber = new byte[32];
-            using var rng = RandomNumberGenerator.Create();
-            rng.GetBytes(randomNumber);
-            return Convert.ToBase64String(randomNumber);
-        }
+      
 
         public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
         {

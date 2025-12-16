@@ -4,8 +4,7 @@ namespace HISWEBAPI.Services
 {
     public interface IJwtService
     {
-        string GenerateToken(string userId, string username, int hospId, int branchId);
-        string GenerateRefreshToken();
+        string GenerateToken(int userId, string userName, string name, int hospId);
         ClaimsPrincipal? GetPrincipalFromExpiredToken(string token);
     }
 }

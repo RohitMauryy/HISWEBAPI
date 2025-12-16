@@ -4,6 +4,7 @@
     {
         public int RoleId { get; set; }
         public string RoleName { get; set; }
+        public string IconClass { get; set; }
     }
 
     public class UserLoginResponseData
@@ -16,7 +17,6 @@
         public bool isEmailVerified { get; set; }
         public int branchId { get; set; }
         public string accessToken { get; set; }
-        public string refreshToken { get; set; }
         public string tokenType { get; set; }
         public int expiresIn { get; set; }
     }
@@ -50,5 +50,27 @@
     {
         public int userId { get; set; }
         public string otp { get; set; }
+    }
+
+
+    public class UserTabModel
+    {
+        public int TabId { get; set; }
+        public string TabName { get; set; }
+        public string IconClass { get; set; }
+    }
+
+    public class UserSubMenuModel
+    {
+        public int SubMenuId { get; set; }
+        public string SubMenuName { get; set; }
+        public string URL { get; set; }
+        public int TabId { get; set; }
+    }
+
+    public class UserTabMenuMappingResponse
+    {
+        public List<UserTabModel> Tabs { get; set; }
+        public List<UserSubMenuModel> SubMenus { get; set; }
     }
 }

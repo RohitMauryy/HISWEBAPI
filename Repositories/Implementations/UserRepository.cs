@@ -16,6 +16,7 @@ using HISWEBAPI.Services.Interfaces;
 using HISWEBAPI.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Caching.Distributed;
+using System.Text.Json;
 
 namespace HISWEBAPI.Repositories.Implementations
 {
@@ -85,18 +86,19 @@ namespace HISWEBAPI.Repositories.Implementations
                     );
                 }
 
-                int userId = (int)Convert.ToInt64(userRow["Id"]);
-                int hospId = 1; 
-                int branchId = request.BranchId;
+                int userId = Convert.ToInt32(userRow["Id"]);
+                string name = userRow["Name"]?.ToString() ?? "";
+                string userName = userRow["UserName"]?.ToString() ?? "";
+                int hospId = Convert.ToInt32(userRow["HospId"]);
 
-                // Generate token with userId, username, hospId, and branchId
+
+                // Generate token with userId, username, hospId,roleId,userName,name and branchId
                 string accessToken = _jwtService.GenerateToken(
-                    userId.ToString(),
-                    request.UserName,
-                    hospId,
-                    branchId
+                    userId,
+                    userName.ToString(),
+                    name.ToString(),
+                    hospId
                 );
-                string refreshToken = _jwtService.GenerateRefreshToken();
 
                 var responseData = new UserLoginResponseData
                 {
@@ -106,15 +108,14 @@ namespace HISWEBAPI.Repositories.Implementations
                     contact = Convert.ToString(userRow["Contact"]),
                     isContactVerified = Convert.ToBoolean(userRow["IsContactVerified"]),
                     isEmailVerified = Convert.ToBoolean(userRow["IsEmailVerified"]),
-                    branchId = branchId,
+                    branchId = request.BranchId,
                     accessToken = accessToken,
-                    refreshToken = refreshToken,
                     tokenType = "Bearer",
                     expiresIn = _jwtSettings.ExpiryMinutes * 60 // Convert minutes to seconds
                 };
 
                 var alert1 = _messageService.GetMessageAndTypeByAlertCode("LOGIN_SUCCESS");
-                _log.Info($"Login successful for UserId={userId}, HospId={hospId}, BranchId={branchId}");
+                _log.Info($"Login successful for UserId={userId}, HospId={hospId}, BranchId={request.BranchId}");
 
                 return ServiceResult<UserLoginResponseData>.Success(
                     responseData,
@@ -134,89 +135,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 );
             }
         }
-        public ServiceResult<TokenResponseData> RefreshToken(RefreshTokenRequest request)
-        {
-            try
-            {
-                var principal = _jwtService.GetPrincipalFromExpiredToken(request.AccessToken);
-                if (principal == null)
-                {
-                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_ACCESS_TOKEN");
-                    _log.Warn("Invalid access token provided for refresh");
-                    return ServiceResult<TokenResponseData>.Failure(
-                        alert.Type,
-                        alert.Message,
-                        400
-                    );
-                }
-
-                // Extract claims from the expired token
-                var userId = principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                var username = principal.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
-                var hospIdClaim = principal.FindFirst("hospId")?.Value;
-                var branchIdClaim = principal.FindFirst("branchId")?.Value;
-
-                int hospId = int.TryParse(hospIdClaim, out int parsedHospId) ? parsedHospId : 1;
-                int branchId = int.TryParse(branchIdClaim, out int parsedBranchId) ? parsedBranchId : 0;
-
-                var (isValid, sessionId, userIdFromToken) = ValidateRefreshTokenInternal(request.RefreshToken);
-
-                if (!isValid || userIdFromToken.ToString() != userId)
-                {
-                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_REFRESH_TOKEN");
-                    _log.Warn($"Invalid refresh token for UserId={userId}");
-                    return ServiceResult<TokenResponseData>.Failure(
-                        alert.Type,
-                        alert.Message,
-                        401
-                    );
-                }
-
-                // Generate new tokens with all claims
-                var newAccessToken = _jwtService.GenerateToken(
-                    userId ?? "",
-                    username ?? "",
-                    hospId,
-                    branchId
-                );
-                var newRefreshToken = _jwtService.GenerateRefreshToken();
-
-                bool tokenSaved = SaveRefreshTokenInternal(userIdFromToken, sessionId, newRefreshToken, DateTime.UtcNow.AddDays(7));
-
-                if (!tokenSaved)
-                {
-                    _log.Error($"Failed to save refresh token for sessionId={sessionId}");
-                }
-
-                var responseData = new TokenResponseData
-                {
-                    accessToken = newAccessToken,
-                    refreshToken = newRefreshToken,
-                    tokenType = "Bearer",
-                    expiresIn = _jwtSettings.ExpiryMinutes * 60 // Convert minutes to seconds
-                };
-
-                var alert1 = _messageService.GetMessageAndTypeByAlertCode("TOKEN_REFRESHED");
-                _log.Info($"Token refreshed successfully for UserId={userId}, HospId={hospId}, BranchId={branchId}");
-
-                return ServiceResult<TokenResponseData>.Success(
-                    responseData,
-                    alert1.Type,
-                    alert1.Message,
-                    200
-                );
-            }
-            catch (Exception ex)
-            {
-                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-                var alert = _messageService.GetMessageAndTypeByAlertCode("TOKEN_REFRESH_ERROR");
-                return ServiceResult<TokenResponseData>.Failure(
-                    alert.Type,
-                    alert.Message,
-                    500
-                );
-            }
-        }
+      
         public ServiceResult<string> Logout(LogoutRequest request)
         {
             try
@@ -798,7 +717,8 @@ namespace HISWEBAPI.Repositories.Implementations
                 var roles = dataTable?.AsEnumerable().Select(row => new UserRoleModel
                 {
                     RoleId = row.Field<int>("RoleId"),
-                    RoleName = row.Field<string>("RoleName")
+                    RoleName = row.Field<string>("RoleName"),
+                    IconClass = row.Field<string>("IconClass")
                 }).ToList() ?? new List<UserRoleModel>();
 
                 if (!roles.Any())
@@ -1002,51 +922,6 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-        private bool SaveRefreshTokenInternal(long userId, long sessionId, string refreshToken, DateTime expiryDate)
-        {
-            try
-            {
-                var result = _sqlHelper.DML("IU_UserRefreshToken", CommandType.StoredProcedure, new
-                {
-                    @UserId = userId,
-                    @SessionId = sessionId,
-                    @RefreshToken = refreshToken,
-                    @ExpiryDate = expiryDate
-                });
-
-                return result > 0;
-            }
-            catch (Exception ex)
-            {
-                return false;
-            }
-        }
-
-        private (bool isValid, long sessionId, long userId) ValidateRefreshTokenInternal(string refreshToken)
-        {
-            try
-            {
-                SqlParameter[] parameters = new SqlParameter[]
-                {
-                    new SqlParameter("@RefreshToken", refreshToken),
-                    new SqlParameter("@IsValid", SqlDbType.Bit) { Direction = ParameterDirection.Output },
-                    new SqlParameter("@SessionId", SqlDbType.BigInt) { Direction = ParameterDirection.Output },
-                    new SqlParameter("@UserId", SqlDbType.BigInt) { Direction = ParameterDirection.Output }
-                };
-
-                _sqlHelper.RunProcedure("S_ValidateRefreshToken", parameters);
-
-                bool isValid = parameters[1].Value != DBNull.Value && (bool)parameters[1].Value;
-                long sessionId = parameters[2].Value != DBNull.Value ? Convert.ToInt64(parameters[2].Value) : 0;
-                long userId = parameters[3].Value != DBNull.Value ? Convert.ToInt64(parameters[3].Value) : 0;
-
-                return (isValid, sessionId, userId);
-            }
-            catch (Exception ex)
-            {
-                return (false, 0, 0);
-            }
-        }
 
         private bool InvalidateRefreshTokenInternal(long sessionId)
         {
@@ -1113,6 +988,127 @@ namespace HISWEBAPI.Repositories.Implementations
 
             return $"{first2}{middle}{lastChar}@{domain}";
         }
+
+        public ServiceResult<UserTabMenuMappingResponse> GetUserTabAndSubMenuMapping(int roleId, int branchId, int userId)
+        {
+            try
+            {
+                _log.Info($"GetUserTabAndSubMenuMapping called. RoleId={roleId}, BranchId={branchId}, UserId={userId}");
+
+                // Create dynamic cache key based on parameters
+                string cacheKey = $"_UserTabMenu_{branchId}_{roleId}_{userId}";
+
+                // Try to get data from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                UserTabMenuMappingResponse mappingResponse;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"UserTabMenuMapping data retrieved from cache. Key={cacheKey}");
+                    mappingResponse = JsonSerializer.Deserialize<UserTabMenuMappingResponse>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"UserTabMenuMapping cache miss. Fetching data from database. Key={cacheKey}");
+
+                    // Fetch data from stored procedure
+                    var dataSet = _sqlHelper.GetDataSet(
+                        "S_UserTabAndSubMenuMapping",
+                        CommandType.StoredProcedure,
+                        new
+                        {
+                            @RoleId = roleId,
+                            @BranchId = branchId,
+                            @UserId = userId
+                        }
+                    );
+
+                    if (dataSet == null || dataSet.Tables.Count < 2)
+                    {
+                        var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                        _log.Warn($"No tab/menu data found for RoleId={roleId}, BranchId={branchId}, UserId={userId}");
+                        return ServiceResult<UserTabMenuMappingResponse>.Failure(
+                            alert.Type,
+                            "No menu data found for the user",
+                            404
+                        );
+                    }
+
+                    // Map Tabs (First result set)
+                    var tabsTable = dataSet.Tables[0];
+                    var tabs = tabsTable?.AsEnumerable().Select(row => new UserTabModel
+                    {
+                        TabId = row.Field<int>("TabId"),
+                        TabName = row.Field<string>("TabName") ?? string.Empty,
+                        IconClass = row.Field<string>("IconClass") ?? string.Empty
+                    }).ToList() ?? new List<UserTabModel>();
+
+                    // Map SubMenus (Second result set)
+                    var subMenusTable = dataSet.Tables[1];
+                    var subMenus = subMenusTable?.AsEnumerable().Select(row => new UserSubMenuModel
+                    {
+                        SubMenuId = row.Field<int>("SubMenuId"),
+                        SubMenuName = row.Field<string>("SubMenuName") ?? string.Empty,
+                        URL = row.Field<string>("URL") ?? string.Empty,
+                        TabId = row.Field<int>("TabId")
+                    }).ToList() ?? new List<UserSubMenuModel>();
+
+                    mappingResponse = new UserTabMenuMappingResponse
+                    {
+                        Tabs = tabs,
+                        SubMenus = subMenus
+                    };
+
+                    // Cache the data permanently (no expiration)
+                    if (tabs.Any() || subMenus.Any())
+                    {
+                        var serialized = JsonSerializer.Serialize(mappingResponse);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"UserTabMenuMapping data cached permanently. Key={cacheKey}, Tabs={tabs.Count}, SubMenus={subMenus.Count}");
+                    }
+                }
+
+                if ((mappingResponse.Tabs == null || !mappingResponse.Tabs.Any()) &&
+                    (mappingResponse.SubMenus == null || !mappingResponse.SubMenus.Any()))
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No tab/menu mapping found for user");
+                    return ServiceResult<UserTabMenuMappingResponse>.Failure(
+                        alert.Type,
+                        "No menu data found for the user",
+                        404
+                    );
+                }
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_COMPLETED_SUCCESSFULLY");
+                _log.Info($"Retrieved {mappingResponse.Tabs?.Count ?? 0} tabs and {mappingResponse.SubMenus?.Count ?? 0} submenus from cache");
+
+                return ServiceResult<UserTabMenuMappingResponse>.Success(
+                    mappingResponse,
+                    alert1.Type,
+                    $"{mappingResponse.Tabs?.Count ?? 0} tab(s) and {mappingResponse.SubMenus?.Count ?? 0} submenu(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<UserTabMenuMappingResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
 
         #endregion
     }

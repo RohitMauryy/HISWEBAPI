@@ -10,6 +10,8 @@ using HISWEBAPI.Services;
 using HISWEBAPI.Models;
 using Microsoft.AspNetCore.Authorization;
 using HISWEBAPI.Configuration;
+using HISWEBAPI.Repositories.Implementations;
+using System.Text.RegularExpressions;
 
 namespace HISWEBAPI.Controllers
 {
@@ -159,7 +161,7 @@ namespace HISWEBAPI.Controllers
 
                 var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
 
-                _log.Info($"Global values retrieved: HospId={globalValues.hospId}, UserId={globalValues.userId}, BranchId={globalValues.branchId}, IpAddress={globalValues.ipAddress}");
+                _log.Info($"Global values retrieved: HospId={globalValues.hospId}, UserId={globalValues.userId}, IpAddress={globalValues.ipAddress}");
 
                 var alert = _messageService.GetMessageAndTypeByAlertCode("OPERATION_COMPLETED_SUCCESSFULLY");
 
@@ -174,6 +176,208 @@ namespace HISWEBAPI.Controllers
            
         }
 
+
+        [HttpGet("getCountryMaster")]
+        [Authorize]
+        public IActionResult GetCountryMaster([FromQuery] int? isActive = null)
+        {
+            _log.Info($"GetCountryMaster called. IsActive={isActive?.ToString() ?? "All"}");
+
+            var serviceResult = _homeRepository.GetCountryMaster(isActive);
+
+            if (serviceResult.Result)
+                _log.Info($"Countries fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No countries found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getStateMaster")]
+        [Authorize]
+        public IActionResult GetStateMaster([FromQuery] int countryId, [FromQuery] int? isActive = null)
+        {
+            _log.Info($"GetStateMaster called. CountryId={countryId}, IsActive={isActive?.ToString() ?? "All"}");
+
+            if (countryId <= 0)
+            {
+                _log.Warn("Invalid CountryId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "CountryId must be greater than 0",
+                    errors = new { countryId }
+                });
+            }
+
+            var serviceResult = _homeRepository.GetStateMaster(countryId, isActive);
+
+            if (serviceResult.Result)
+                _log.Info($"States fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No states found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getDistrictMaster")]
+        [Authorize]
+        public IActionResult GetDistrictMaster([FromQuery] int stateId, [FromQuery] int? isActive = null)
+        {
+            _log.Info($"GetDistrictMaster called. StateId={stateId}, IsActive={isActive?.ToString() ?? "All"}");
+
+            if (stateId <= 0)
+            {
+                _log.Warn("Invalid StateId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "StateId must be greater than 0",
+                    errors = new { stateId }
+                });
+            }
+
+            var serviceResult = _homeRepository.GetDistrictMaster(stateId, isActive);
+
+            if (serviceResult.Result)
+                _log.Info($"Districts fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No districts found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getCityMaster")]
+        [Authorize]
+        public IActionResult GetCityMaster([FromQuery] int districtId, [FromQuery] int? isActive = null)
+        {
+            _log.Info($"GetCityMaster called. DistrictId={districtId}, IsActive={isActive?.ToString() ?? "All"}");
+
+            if (districtId <= 0)
+            {
+                _log.Warn("Invalid DistrictId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "DistrictId must be greater than 0",
+                    errors = new { districtId }
+                });
+            }
+
+            var serviceResult = _homeRepository.GetCityMaster(districtId, isActive);
+
+            if (serviceResult.Result)
+                _log.Info($"Cities fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No cities found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getAllInsuranceCompanyList")]
+        [Authorize]
+        public IActionResult GetAllInsuranceCompanyList()
+        {
+            _log.Info("GetAllInsuranceCompanyList API called.");
+
+            var serviceResult = _homeRepository.GetAllInsuranceCompanyList();
+
+            if (serviceResult.Result)
+                _log.Info($"Insurance companies fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"No insurance companies found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+      
+        [HttpGet("getCorporateListByInsuranceCompanyId")]
+        [Authorize]
+        public IActionResult GetCorporateListByInsuranceCompanyId(
+            [FromQuery] int? insuranceCompanyId,
+            [FromQuery] int? isActive = null)
+        {
+            _log.Info($"GetCorporateListByInsuranceCompanyId API called. InsuranceCompanyId={insuranceCompanyId?.ToString() ?? "All"}, IsActive={isActive?.ToString() ?? "All"}");
+
+            if (insuranceCompanyId == null || insuranceCompanyId < 0)
+            {
+                _log.Warn("Invalid insuranceCompanyId supplied.");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = "ERROR",
+                    message = "insuranceCompanyId is mandatory and must be greater than equal to 0.",
+                    data = ""
+                });
+            }
+
+            // Validate IsActive parameter if provided
+            if (isActive.HasValue && isActive.Value != 0 && isActive.Value != 1)
+            {
+                _log.Warn($"Invalid IsActive parameter: {isActive.Value}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 (Inactive), 1 (Active), or null (All)",
+                    errors = new { isActive }
+                });
+            }
+
+            var serviceResult = _homeRepository.GetCorporateListByInsuranceCompanyId(
+                insuranceCompanyId,
+                isActive);
+
+            if (serviceResult.Result)
+                _log.Info($"Corporates fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"No corporates found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
 
     }
 }

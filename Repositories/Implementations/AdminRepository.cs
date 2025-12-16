@@ -14,6 +14,7 @@ using log4net;
 using Microsoft.Data.SqlClient;
 using HISWEBAPI.Utilities;
 using Microsoft.Extensions.Caching.Distributed;
+using StackExchange.Redis;
 
 namespace HISWEBAPI.Repositories.Implementations
 {
@@ -851,57 +852,7 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-        //public ServiceResult<IEnumerable<UserGroupMasterModel>> UserGroupList()
-        //{
-        //    try
-        //    {
-        //        var dataTable = _sqlHelper.GetDataTable(
-        //            "S_GetUserGroupList",
-        //            CommandType.StoredProcedure,
-        //            new { }
-        //        );
-
-        //        var groups = dataTable?.AsEnumerable().Select(row => new UserGroupMasterModel
-        //        {
-        //            Id = row.Field<int>("Id"),
-        //            GroupName = row.Field<string>("GroupName") ?? string.Empty,
-        //            IsActive = row.Field<int>("IsActive"),
-        //            CreatedBy = row.Field<string>("CreatedBy"),
-        //            CreatedOn = row.Field<string>("CreatedOn"),
-        //            LastModifiedBy = row.Field<string>("LastModifiedBy"),
-        //            LastModifiedOn = row.Field<string>("LastModifiedOn"),
-        //            IPAddress = row.Field<string>("IPAddress")
-        //        }).ToList() ?? new List<UserGroupMasterModel>();
-
-        //        if (!groups.Any())
-        //        {
-        //            var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
-        //            return ServiceResult<IEnumerable<UserGroupMasterModel>>.Failure(
-        //                alert.Type,
-        //                alert.Message,
-        //                404 // Not Found
-        //            );
-        //        }
-
-        //        return ServiceResult<IEnumerable<UserGroupMasterModel>>.Success(
-        //            groups,
-        //            "Info",
-        //            $"{groups.Count} groups fetched successfully",
-        //            200
-        //        );
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
-        //        var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
-        //        return ServiceResult<IEnumerable<UserGroupMasterModel>>.Failure(
-        //            alert.Type,
-        //            alert.Message,
-        //            500
-        //        );
-        //    }
-        //}
-
+       
         public ServiceResult<string> UpdateUserGroupStatus(int id, int isActive, AllGlobalValues globalValues)
         {
             try
@@ -1914,7 +1865,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 {
                     var deleteResult = _sqlHelper.DML("D_DeleteRoleWiseMenuMappingMaster", CommandType.StoredProcedure, new
                     {
-                        @BranchId = request.BranchId,
+                        @BranchId = 1,
                         @RoleId = request.RoleId
                     },
                     new
@@ -1926,7 +1877,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 }
 
                 // Generate cache key for this specific mapping
-                string cacheKey = $"_RoleWiseMenuMapping_{request.BranchId}_{request.RoleId}";
+                string cacheKey = $"_RoleWiseMenuMapping_{1}_{request.RoleId}";
 
                 // If MenuMappings list is empty or null, only delete operation was needed
                 if (request.MenuMappings == null || !request.MenuMappings.Any())
@@ -1994,7 +1945,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     var result = _sqlHelper.DML("IU_RoleWiseMenuMappingMaster", CommandType.StoredProcedure, new
                     {
                         @RoleId = menuMapping.RoleId,
-                        @BranchId = menuMapping.BranchId,
+                        @BranchId = 1,
                         @SubMenuId = menuMapping.SubMenuId,
                         @HospId = globalValues.hospId,
                         @CreatedBy = globalValues.userId,
@@ -2043,10 +1994,10 @@ namespace HISWEBAPI.Repositories.Implementations
         {
             try
             {
-                _log.Info($"GetRoleWiseMenuMapping called. BranchId={branchId}, RoleId={roleId}");
+                _log.Info($"GetRoleWiseMenuMapping called. BranchId={1}, RoleId={roleId}");
 
                 // Generate dynamic cache key based on branchId and roleId
-                string cacheKey = $"_RoleWiseMenuMapping_{branchId}_{roleId}";
+                string cacheKey = $"_RoleWiseMenuMapping_{1}_{roleId}";
 
                 // Try to get data from cache
                 var cachedData = _distributedCache.GetString(cacheKey);
@@ -2066,7 +2017,7 @@ namespace HISWEBAPI.Repositories.Implementations
                         CommandType.StoredProcedure,
                         new
                         {
-                            @BranchId = branchId,
+                            @BranchId = 1,
                             @RoleId = roleId
                         }
                     );
@@ -2155,13 +2106,16 @@ namespace HISWEBAPI.Repositories.Implementations
 
                 // Generate cache key for this specific user menu mapping
                 string cacheKey = $"_UserWiseMenuMapping_{request.BranchId}_{request.TypeId}_{request.UserId}_{request.RoleId}";
+                string cacheKey2 = $"_UserTabMenu_{request.BranchId}_{request.RoleId}_{request.UserId}";
+                // Clear cache after delete
+                _distributedCache.Remove(cacheKey);
+                _distributedCache.Remove(cacheKey2);
+                _log.Info($"Cleared cache for key: {cacheKey},{cacheKey2}");
 
                 // If UserMenus list is empty or null, only delete operation was needed
                 if (request.UserMenus == null || !request.UserMenus.Any())
                 {
-                    // Clear cache after delete
-                    _distributedCache.Remove(cacheKey);
-                    _log.Info($"Cleared cache for key: {cacheKey}");
+                    
 
                     var alert = _messageService.GetMessageAndTypeByAlertCode(
                         request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
@@ -2181,9 +2135,7 @@ namespace HISWEBAPI.Repositories.Implementations
 
                 if (!validUserMenus.Any())
                 {
-                    // Clear cache
-                    _distributedCache.Remove(cacheKey);
-                    _log.Info($"Cleared cache for key: {cacheKey}");
+                  
 
                     var alert = _messageService.GetMessageAndTypeByAlertCode(
                         request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
@@ -2243,9 +2195,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     }
                 }
 
-                // Clear cache after successful operation
-                _distributedCache.Remove(cacheKey);
-                _log.Info($"Cleared cache for key: {cacheKey}");
+              
 
                 _log.Info($"Inserted {insertedCount} user menu records for UserId={request.UserId}");
 
@@ -2820,6 +2770,542 @@ namespace HISWEBAPI.Repositories.Implementations
                     alert.Message,
                     500
                 );
+            }
+        }
+
+        public ServiceResult<BranchMasterResponse> CreateUpdateBranchMaster(BranchMasterRequest request, AllGlobalValues globalValues)
+        {
+            try
+            {
+                SqlParameter[] parameters = new SqlParameter[]
+                {
+            new SqlParameter("@hospId", globalValues.hospId),
+            new SqlParameter("@branchId", request.BranchId),
+            new SqlParameter("@branchName", request.BranchName),
+            new SqlParameter("@branchCode", request.BranchCode),
+            new SqlParameter("@email", request.Email ?? (object)DBNull.Value),
+            new SqlParameter("@contactNo1", request.ContactNo1),
+            new SqlParameter("@contactNo2", request.ContactNo2 ?? (object)DBNull.Value),
+            new SqlParameter("@address", request.Address ?? (object)DBNull.Value),
+            new SqlParameter("@isActive", request.IsActive),
+            new SqlParameter("@fYStartFrom", request.FYStartFrom),
+            new SqlParameter("@defaultCountryId", request.DefaultCountryId),
+            new SqlParameter("@defaultStateId", request.DefaultStateId),
+            new SqlParameter("@defaultDistrictId", request.DefaultDistrictId),
+            new SqlParameter("@defaultCityId", request.DefaultCityId),
+            new SqlParameter("@defaultInsuranceCompanyId", request.DefaultInsuranceCompanyId),
+            new SqlParameter("@defaultCorporateId", request.DefaultCorporateId),
+            new SqlParameter("@userId", globalValues.userId),
+            new SqlParameter("@IpAddress", globalValues.ipAddress),
+            new SqlParameter("@Result", SqlDbType.Int) { Direction = ParameterDirection.Output }
+                };
+
+                long result = _sqlHelper.RunProcedureInsert("IU_BranchMaster", parameters);
+
+                // Clear cache after successful operation
+                _distributedCache.Remove("_BranchMaster_All");
+
+                if (result == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Duplicate branch name or code attempted: {request.BranchName}");
+                    return ServiceResult<BranchMasterResponse>.Failure(
+                        alert.Type,
+                        "Branch Name or Branch Code already exists",
+                        409
+                    );
+                }
+
+                if (request.BranchId == 0)
+                {
+                    var responseData = new BranchMasterResponse { BranchId = (int)result };
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
+                    _log.Info($"Branch created successfully. BranchId={result}");
+                    return ServiceResult<BranchMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        201
+                    );
+                }
+                else
+                {
+                    var responseData = new BranchMasterResponse { BranchId = (int)result };
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
+                    _log.Info($"Branch updated successfully. BranchId={result}");
+                    return ServiceResult<BranchMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<BranchMasterResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<BranchMasterModel>> GetBranchDetails(int? branchId = null)
+        {
+            try
+            {
+                _log.Info($"GetBranchDetails called. BranchId={branchId?.ToString() ?? "All"}");
+
+                string cacheKey = "_BranchMaster_All";
+
+                // Try to get all branches from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<BranchMasterModel> allBranches;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"BranchMaster data retrieved from cache. Key={cacheKey}");
+                    allBranches = System.Text.Json.JsonSerializer.Deserialize<List<BranchMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"BranchMaster cache miss. Fetching all data from database. Key={cacheKey}");
+
+                    // Fetch ALL branches from database (NO parameters - SP returns everything)
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetBranchDetails",
+                        CommandType.StoredProcedure
+                    );
+
+                    allBranches = dataTable?.AsEnumerable().Select(row => new BranchMasterModel
+                    {
+                        BranchId = row.Field<int>("BranchId"),
+                        BranchName = row.Field<string>("BranchName") ?? string.Empty,
+                        BranchCode = row.Field<string>("BranchCode") ?? string.Empty,
+                        Email = row.Field<string>("Email") ?? string.Empty,
+                        ContactNo1 = row.Field<string>("ContactNo1") ?? string.Empty,
+                        ContactNo2 = row.Field<string>("ContactNo2") ?? string.Empty,
+                        Address = row.Field<string>("Address") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive"),
+                        FYStartMonth = row.Field<string>("FYStartMonth") ?? string.Empty,
+                        DefaultCountryId = row.Field<int>("DefaultCountryId"),
+                        DefaultStateId = row.Field<int>("DefaultStateId"),
+                        DefaultDistrictId = row.Field<int>("DefaultDistrictId"),
+                        DefaultCityId = row.Field<int>("DefaultCityId"),
+                        DefaultInsuranceCompanyId = row.Field<int>("DefaultInsuranceCompanyId"),
+                        DefaultCorporateId = row.Field<int>("DefaultCorporateId")
+                    }).ToList() ?? new List<BranchMasterModel>();
+
+                    // Store ALL branches in cache (no expiration)
+                    if (allBranches.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(allBranches);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"All BranchMaster data cached permanently. Key={cacheKey}, Count={allBranches.Count}");
+                    }
+                }
+
+                // Filter in memory based on branchId parameter (always from cache)
+                List<BranchMasterModel> filteredBranches;
+                if (branchId.HasValue)
+                {
+                    _log.Info($"Filtering cached data by BranchId: {branchId.Value}");
+                    filteredBranches = allBranches.Where(b => b.BranchId == branchId.Value).ToList();
+                }
+                else
+                {
+                    _log.Info("Returning all cached branches");
+                    filteredBranches = allBranches;
+                }
+
+                if (!filteredBranches.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No branches found for BranchId: {branchId?.ToString() ?? "All"}");
+                    return ServiceResult<IEnumerable<BranchMasterModel>>.Failure(
+                        alert.Type,
+                        branchId.HasValue
+                            ? $"Branch not found for BranchId: {branchId.Value}"
+                            : "No branches found",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {filteredBranches.Count} branch(es) from cache");
+
+                return ServiceResult<IEnumerable<BranchMasterModel>>.Success(
+                    filteredBranches,
+                    "Info",
+                    $"{filteredBranches.Count} branch(es) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<BranchMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
+
+        public ServiceResult<int> CreateUpdateStateMaster(CreateUpdateStateMasterRequest request, AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdateStateMaster called. StateId={request.StateId}, CountryId={request.CountryId}, StateName={request.StateName}");
+
+                var dataTable = _sqlHelper.GetDataTable(
+                    "IU_StateMaster",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        StateId = request.StateId,
+                        CountryId = request.CountryId,
+                        StateName = request.StateName,
+                        IsActive = request.IsActive,
+                        UserId = globalValues.userId,
+                        IpAddress = globalValues.ipAddress
+                    }
+                );
+
+                if (dataTable == null || dataTable.Rows.Count == 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                    _log.Error("No result returned from stored procedure");
+                    return ServiceResult<int>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        500
+                    );
+                }
+
+                int result = Convert.ToInt32(dataTable.Rows[0]["Result"]);
+
+                // Clear all state-related cache keys
+                ClearStateMasterCache(request.CountryId);
+
+                if (result == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Duplicate state name: {request.StateName} for CountryId={request.CountryId}");
+                    return ServiceResult<int>.Failure(
+                        alert.Type,
+                        $"State '{request.StateName}' already exists for this country",
+                        409
+                    );
+                }
+
+                if (result == -2)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Warn($"StateId not found: {request.StateId}");
+                    return ServiceResult<int>.Failure(
+                        alert.Type,
+                        "State record not found",
+                        404
+                    );
+                }
+
+                if (result > 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.StateId <= 0 ? "DATA_SAVED_SUCCESSFULLY" : "DATA_UPDATED_SUCCESSFULLY"
+                    );
+
+                    _log.Info($"State {(request.StateId <= 0 ? "created" : "updated")} successfully. StateId={result}. Cache cleared.");
+
+                    return ServiceResult<int>.Success(
+                        result,
+                        alert.Type,
+                        alert.Message,
+                        request.StateId <= 0 ? 201 : 200
+                    );
+                }
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_FAILED");
+                _log.Error($"Operation failed with result: {result}");
+                return ServiceResult<int>.Failure(
+                    alert1.Type,
+                    alert1.Message,
+                    500
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<int>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<int> CreateUpdateDistrictMaster(CreateUpdateDistrictMasterRequest request, AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdateDistrictMaster called. DistrictId={request.DistrictId}, StateId={request.StateId}, DistrictName={request.DistrictName}");
+
+                var dataTable = _sqlHelper.GetDataTable(
+                    "IU_DistrictMaster",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        DistrictId = request.DistrictId,
+                        StateId = request.StateId,
+                        CountryId = request.CountryId,
+                        DistrictName = request.DistrictName,
+                        IsActive = request.IsActive,
+                        UserId = globalValues.userId,
+                        IpAddress = globalValues.ipAddress
+                    }
+                );
+
+                if (dataTable == null || dataTable.Rows.Count == 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                    _log.Error("No result returned from stored procedure");
+                    return ServiceResult<int>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        500
+                    );
+                }
+
+                int result = Convert.ToInt32(dataTable.Rows[0]["Result"]);
+
+                // Clear all district-related cache keys
+                ClearDistrictMasterCache(request.StateId);
+
+                if (result == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Duplicate district name: {request.DistrictName} for StateId={request.StateId}");
+                    return ServiceResult<int>.Failure(
+                        alert.Type,
+                        $"District '{request.DistrictName}' already exists for this state",
+                        409
+                    );
+                }
+
+                if (result == -2)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Warn($"DistrictId not found: {request.DistrictId}");
+                    return ServiceResult<int>.Failure(
+                        alert.Type,
+                        "District record not found",
+                        404
+                    );
+                }
+
+                if (result > 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.DistrictId <= 0 ? "DATA_SAVED_SUCCESSFULLY" : "DATA_UPDATED_SUCCESSFULLY"
+                    );
+
+                    _log.Info($"District {(request.DistrictId <= 0 ? "created" : "updated")} successfully. DistrictId={result}. Cache cleared.");
+
+                    return ServiceResult<int>.Success(
+                        result,
+                        alert.Type,
+                        alert.Message,
+                        request.DistrictId <= 0 ? 201 : 200
+                    );
+                }
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_FAILED");
+                _log.Error($"Operation failed with result: {result}");
+                return ServiceResult<int>.Failure(
+                    alert1.Type,
+                    alert1.Message,
+                    500
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<int>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<int> CreateUpdateCityMaster(CreateUpdateCityMasterRequest request, AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdateCityMaster called. CityId={request.CityId}, DistrictId={request.DistrictId}, CityName={request.CityName}");
+
+                var dataTable = _sqlHelper.GetDataTable(
+                    "IU_CityMaster",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        CityId = request.CityId,
+                        DistrictId = request.DistrictId,
+                        StateId = request.StateId,
+                        CountryId = request.CountryId,
+                        CityName = request.CityName,
+                        Pincode = request.Pincode,
+                        IsActive = request.IsActive,
+                        UserId = globalValues.userId,
+                        IpAddress = globalValues.ipAddress
+                    }
+                );
+
+                if (dataTable == null || dataTable.Rows.Count == 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                    _log.Error("No result returned from stored procedure");
+                    return ServiceResult<int>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        500
+                    );
+                }
+
+                int result = Convert.ToInt32(dataTable.Rows[0]["Result"]);
+
+                // Clear all city-related cache keys
+                ClearCityMasterCache(request.DistrictId);
+
+                if (result == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Duplicate city name: {request.CityName} for DistrictId={request.DistrictId}");
+                    return ServiceResult<int>.Failure(
+                        alert.Type,
+                        $"City '{request.CityName}' already exists for this district",
+                        409
+                    );
+                }
+
+                if (result == -2)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Warn($"CityId not found: {request.CityId}");
+                    return ServiceResult<int>.Failure(
+                        alert.Type,
+                        "City record not found",
+                        404
+                    );
+                }
+
+                if (result == -3)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    _log.Warn($"Invalid pincode format: {request.Pincode}");
+                    return ServiceResult<int>.Failure(
+                        alert.Type,
+                        "Pincode must be exactly 6 digits",
+                        400
+                    );
+                }
+
+                if (result > 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.CityId <= 0 ? "DATA_SAVED_SUCCESSFULLY" : "DATA_UPDATED_SUCCESSFULLY"
+                    );
+
+                    _log.Info($"City {(request.CityId <= 0 ? "created" : "updated")} successfully. CityId={result}. Cache cleared.");
+
+                    return ServiceResult<int>.Success(
+                        result,
+                        alert.Type,
+                        alert.Message,
+                        request.CityId <= 0 ? 201 : 200
+                    );
+                }
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_FAILED");
+                _log.Error($"Operation failed with result: {result}");
+                return ServiceResult<int>.Failure(
+                    alert1.Type,
+                    alert1.Message,
+                    500
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<int>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        // Helper methods to clear cache
+        private void ClearStateMasterCache(int countryId)
+        {
+            try
+            {
+                // Clear all possible cache keys for this country's states
+                _distributedCache.Remove($"_StateMaster_Country{countryId}_All");
+                _distributedCache.Remove($"_StateMaster_Country{countryId}_1");
+                _distributedCache.Remove($"_StateMaster_Country{countryId}_0");
+                _log.Info($"Cleared StateMaster cache for CountryId={countryId}");
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error clearing StateMaster cache: {ex.Message}");
+            }
+        }
+
+        private void ClearDistrictMasterCache(int stateId)
+        {
+            try
+            {
+                // Clear all possible cache keys for this state's districts
+                _distributedCache.Remove($"_DistrictMaster_State{stateId}_All");
+                _distributedCache.Remove($"_DistrictMaster_State{stateId}_1");
+                _distributedCache.Remove($"_DistrictMaster_State{stateId}_0");
+                _log.Info($"Cleared DistrictMaster cache for StateId={stateId}");
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error clearing DistrictMaster cache: {ex.Message}");
+            }
+        }
+
+        private void ClearCityMasterCache(int districtId)
+        {
+            try
+            {
+                // Clear all possible cache keys for this district's cities
+                _distributedCache.Remove($"_CityMaster_District{districtId}_All");
+                _distributedCache.Remove($"_CityMaster_District{districtId}_1");
+                _distributedCache.Remove($"_CityMaster_District{districtId}_0");
+                _log.Info($"Cleared CityMaster cache for DistrictId={districtId}");
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error clearing CityMaster cache: {ex.Message}");
             }
         }
     }

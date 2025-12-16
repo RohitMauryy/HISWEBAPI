@@ -39,5 +39,12 @@ namespace HISWEBAPI.Repositories.Interfaces
         ServiceResult<IEnumerable<UserWiseCorporateMappingModel>> GetUserWiseCorporateMapping(int branchId, int typeId, int userId);
         ServiceResult<string> SaveUpdateUserBedMapping(SaveUserBedMappingRequest request, AllGlobalValues globalValues);
         ServiceResult<IEnumerable<UserWiseBedMappingModel>> GetUserWiseBedMapping(int branchId, int typeId, int userId);
+        ServiceResult<BranchMasterResponse> CreateUpdateBranchMaster(BranchMasterRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<BranchMasterModel>> GetBranchDetails(int? branchId = null);
+        ServiceResult<int> CreateUpdateStateMaster(CreateUpdateStateMasterRequest request, AllGlobalValues globalValues);
+        ServiceResult<int> CreateUpdateDistrictMaster(CreateUpdateDistrictMasterRequest request, AllGlobalValues globalValues);
+        ServiceResult<int> CreateUpdateCityMaster(CreateUpdateCityMasterRequest request, AllGlobalValues globalValues);
+
+
     }
 }

@@ -36,7 +36,7 @@ public static class DependencyInjection
             options.AddPolicy("_myAllowSpecificOrigins", policy =>
             {
                 policy.WithOrigins(configuration.GetSection("AllowedOrigins").Get<string[]>()
-                                   ?? new[] { "http://localhost:5173" })
+                                   ?? new[] { "http://localhost:3000" })
                       .AllowAnyMethod()
                       .AllowAnyHeader();
             });

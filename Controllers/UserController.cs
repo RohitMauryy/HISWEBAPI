@@ -9,6 +9,8 @@ using HISWEBAPI.DTO;
 using HISWEBAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using HISWEBAPI.Models;
+using HISWEBAPI.Configuration;
+using StackExchange.Redis;
 
 namespace HISWEBAPI.Controllers
 {
@@ -65,40 +67,7 @@ namespace HISWEBAPI.Controllers
             });
         }
 
-        [HttpPost("refreshToken")]
-        [AllowAnonymous]
-        public IActionResult RefreshToken([FromBody] RefreshTokenRequest request)
-        {
-            _log.Info("RefreshToken called.");
-
-            if (!ModelState.IsValid)
-            {
-                _log.Warn("Invalid model state for refresh token.");
-                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
-                return BadRequest(new
-                {
-                    result = false,
-                    messageType = alert.Type,
-                    message = alert.Message,
-                    errors = ModelState
-                });
-            }
-
-            var serviceResult = _userRepository.RefreshToken(request);
-
-            if (serviceResult.Result)
-                _log.Info($"Token refreshed successfully: {serviceResult.Message}");
-            else
-                _log.Warn($"Token refresh failed: {serviceResult.Message}");
-
-            return StatusCode(serviceResult.StatusCode, new
-            {
-                result = serviceResult.Result,
-                messageType = serviceResult.MessageType,
-                message = serviceResult.Message,
-                data = serviceResult.Data
-            });
-        }
+       
 
         [HttpPost("logout")]
         [Authorize]
@@ -377,13 +346,28 @@ namespace HISWEBAPI.Controllers
             });
         }
 
+
         [HttpGet("getUserRoles")]
         [Authorize]
-        public IActionResult GetUserRoles([FromQuery] int branchId, int userId)
+        public IActionResult GetUserRoles([FromQuery] int branchId)
         {
-            _log.Info($"GetUserRoles called. UserId={userId}");
+            _log.Info($"GetUserRoles called. ");
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
 
-            var request = new UserRoleRequest { BranchId = branchId, UserId = userId };
+            if (globalValues.userId <= 0)
+            {
+                _log.Warn($"Invalid global values. UserId={globalValues.userId}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_TOKEN");
+                return Unauthorized(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "Invalid user session. Please login again.",
+                    errors = new { userId = globalValues.userId }
+                });
+            }
+
+            var request = new UserRoleRequest { BranchId = branchId, UserId = globalValues.userId };
             var serviceResult = _userRepository.GetUserRoles(request);
 
             if (serviceResult.Result)
@@ -400,5 +384,44 @@ namespace HISWEBAPI.Controllers
             });
         }
 
+
+        [HttpGet("getUserTabAndSubMenuMapping")]
+        [Authorize]
+        public IActionResult GetUserTabAndSubMenuMapping([FromQuery] int branchId, int roleId)
+        {
+            _log.Info($"GetUserTabAndSubMenuMapping called");
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+
+            if (globalValues.userId <= 0)
+            {
+                _log.Warn($"Invalid global values. UserId={globalValues.userId}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_TOKEN");
+                return Unauthorized(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "Invalid user session. Please login again.",
+                    errors = new { userId = globalValues.userId }
+                });
+            }
+
+            _log.Info($"Processing request with UserId={globalValues.userId}, BranchId={branchId}, RoleId={roleId}");
+
+            var serviceResult = _userRepository.GetUserTabAndSubMenuMapping(roleId, branchId, globalValues.userId);
+
+            if (serviceResult.Result)
+                _log.Info($"User tab/menu mapping fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"User tab/menu mapping fetch failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
     }
 }

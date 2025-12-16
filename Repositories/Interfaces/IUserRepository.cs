@@ -7,7 +7,6 @@ namespace HISWEBAPI.Repositories.Interfaces
     public interface IUserRepository
     {
         ServiceResult<UserLoginResponseData> UserLogin(UserLoginRequest request);
-        ServiceResult<TokenResponseData> RefreshToken(RefreshTokenRequest request);
         ServiceResult<string> Logout(LogoutRequest request);
         ServiceResult<UserSignupResponseData> NewUserSignUp(UserSignupRequest request);
         ServiceResult<SmsOtpResponseData> SendSmsOtp(SendSmsOtpRequest request);
@@ -17,5 +16,7 @@ namespace HISWEBAPI.Repositories.Interfaces
         ServiceResult<string> ResetPasswordByUserId(ResetPasswordRequest request);
         ServiceResult<string> UpdatePassword(UpdatePasswordRequest request);
         ServiceResult<IEnumerable<UserRoleModel>> GetUserRoles(UserRoleRequest request);
+        ServiceResult<UserTabMenuMappingResponse> GetUserTabAndSubMenuMapping(int roleId, int branchId, int userId);
+
     }
 }

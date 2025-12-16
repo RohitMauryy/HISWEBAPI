@@ -16,7 +16,8 @@ namespace HISWEBAPI.Configuration
                 {
                     hospId = 0,
                     userId = 0,
-                    branchId = 0,
+                    userName = "Unknown",
+                    name = "Unknown",
                     ipAddress = "Unknown"
                 };
             }
@@ -26,13 +27,15 @@ namespace HISWEBAPI.Configuration
 
             var hospIdClaim = user.Claims.FirstOrDefault(c => c.Type == "hospId")?.Value;
             var userIdClaim = user.Claims.FirstOrDefault(c => c.Type == "userId")?.Value;
-            var branchIdClaim = user.Claims.FirstOrDefault(c => c.Type == "branchId")?.Value;
+            var userNameClaim = user.Claims.FirstOrDefault(c => c.Type == "userName")?.Value;
+            var nameClaim = user.Claims.FirstOrDefault(c => c.Type == "name")?.Value;
 
             return new AllGlobalValues
             {
                 hospId = int.TryParse(hospIdClaim, out int hospId) ? hospId : 0,
                 userId = int.TryParse(userIdClaim, out int userId) ? userId : 0,
-                branchId = int.TryParse(branchIdClaim, out int branchId) ? branchId : 0,
+                userName = userNameClaim ?? "Unknown",
+                name = nameClaim ?? "Unknown",
                 ipAddress = ipAddress ?? "Unknown"
             };
         }
@@ -46,20 +49,23 @@ namespace HISWEBAPI.Configuration
                 {
                     hospId = 0,
                     userId = 0,
-                    branchId = 0,
+                    userName = "Unknown",
+                    name = "Unknown",
                     ipAddress = ipAddress ?? "Unknown"
                 };
             }
 
             var hospIdClaim = user.Claims.FirstOrDefault(c => c.Type == "hospId")?.Value;
             var userIdClaim = user.Claims.FirstOrDefault(c => c.Type == "userId")?.Value;
-            var branchIdClaim = user.Claims.FirstOrDefault(c => c.Type == "branchId")?.Value;
+            var userNameClaim = user.Claims.FirstOrDefault(c => c.Type == "userName")?.Value;
+            var nameClaim = user.Claims.FirstOrDefault(c => c.Type == "name")?.Value;
 
             return new AllGlobalValues
             {
                 hospId = int.TryParse(hospIdClaim, out int hospId) ? hospId : 0,
                 userId = int.TryParse(userIdClaim, out int userId) ? userId : 0,
-                branchId = int.TryParse(branchIdClaim, out int branchId) ? branchId : 0,
+                userName = userNameClaim ?? "Unknown",
+                name = nameClaim ?? "Unknown",
                 ipAddress = ipAddress ?? "Unknown"
             };
         }

@@ -4,7 +4,8 @@
     {
         public int hospId { get; set; }
         public int userId { get; set; }
-        public int branchId { get; set; }
+        public string? userName { get; set; }
+        public string? name { get; set; }
         public string? ipAddress { get; set; }
     }
     public class BranchModel
@@ -188,4 +189,25 @@
         public required string Name { get; set; }
 
     }
+
+    public class BranchMasterModel
+    {
+        public int BranchId { get; set; }
+        public string BranchName { get; set; }
+        public string BranchCode { get; set; }
+        public string Email { get; set; }
+        public string ContactNo1 { get; set; }
+        public string ContactNo2 { get; set; }
+        public string Address { get; set; }
+        public int IsActive { get; set; }
+        public string FYStartMonth { get; set; }
+        public int DefaultCountryId { get; set; }
+        public int DefaultStateId { get; set; }
+        public int DefaultDistrictId { get; set; }
+        public int DefaultCityId { get; set; }
+        public int DefaultInsuranceCompanyId { get; set; }
+        public int DefaultCorporateId { get; set; }
+    }
+
+
 }
