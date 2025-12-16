@@ -1095,9 +1095,16 @@ namespace HISWEBAPI.Repositories.Implementations
 
                 _log.Info($"Deleted existing role mappings for UserId={userId}, BranchId={branchId}, TypeId={typeId}");
 
+                // Generate cache key for this specific role mapping
+                string cacheKey = $"_UserRoleMapping_{branchId}_{typeId}_{userId}";
+
                 // If request list is empty or null, only delete operation is performed
                 if (request == null || !request.Any())
                 {
+                    // Clear cache after delete
+                    _distributedCache.Remove(cacheKey);
+                    _log.Info($"Cleared cache for key: {cacheKey}");
+
                     _log.Info($"No new roles to assign. All roles removed for UserId={userId}");
                     var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_DELETED_SUCCESSFULLY");
                     return ServiceResult<string>.Success(
@@ -1143,6 +1150,10 @@ namespace HISWEBAPI.Repositories.Implementations
                         successCount++;
                     }
                 }
+
+                // Clear cache after successful operation
+                _distributedCache.Remove(cacheKey);
+                _log.Info($"Cleared cache for key: {cacheKey}");
 
                 if (successCount > 0)
                 {
@@ -1191,28 +1202,61 @@ namespace HISWEBAPI.Repositories.Implementations
         {
             try
             {
-                var dataTable = _sqlHelper.GetDataTable(
-                    "S_GetAssignRoleForUserAuthorization",
-                    CommandType.StoredProcedure,
-                    new
-                    {
-                        @BranchId = branchId,
-                        @TypeId = typeId,
-                        @UserId = userId
-                    }
-                );
+                _log.Info($"GetAssignRoleForUserAuthorization called. BranchId={branchId}, TypeId={typeId}, UserId={userId}");
 
-                var roles = dataTable?.AsEnumerable().Select(row => new UserRoleMappingModel
+                // Generate dynamic cache key based on parameters
+                string cacheKey = $"_UserRoleMapping_{branchId}_{typeId}_{userId}";
+
+                // Try to get data from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<UserRoleMappingModel> roles;
+
+                if (!string.IsNullOrEmpty(cachedData))
                 {
-                    isGranted = row.Field<int>("isGranted"),
-                    RoleName = row.Field<string>("RoleName") ?? string.Empty,
-                    RoleId = row.Field<int>("RoleId")
-                }).ToList() ?? new List<UserRoleMappingModel>();
+                    _log.Info($"UserRoleMapping data retrieved from cache. Key={cacheKey}");
+                    roles = System.Text.Json.JsonSerializer.Deserialize<List<UserRoleMappingModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"UserRoleMapping cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetAssignRoleForUserAuthorization",
+                        CommandType.StoredProcedure,
+                        new
+                        {
+                            @BranchId = branchId,
+                            @TypeId = typeId,
+                            @UserId = userId
+                        }
+                    );
+
+                    roles = dataTable?.AsEnumerable().Select(row => new UserRoleMappingModel
+                    {
+                        isGranted = row.Field<int>("isGranted"),
+                        RoleName = row.Field<string>("RoleName") ?? string.Empty,
+                        RoleId = row.Field<int>("RoleId")
+                    }).ToList() ?? new List<UserRoleMappingModel>();
+
+                    // Store data in cache with no expiration (permanent until manually cleared)
+                    if (roles.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(roles);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"UserRoleMapping data cached permanently. Key={cacheKey}, Count={roles.Count}");
+                    }
+                }
 
                 if (!roles.Any())
                 {
                     var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
-                    _log.Warn($"No role authorization data found for UserId={userId}, BranchId={branchId}, TypeId={typeId}");
+                    _log.Info($"No role authorization data found for UserId={userId}, BranchId={branchId}, TypeId={typeId}");
                     return ServiceResult<IEnumerable<UserRoleMappingModel>>.Failure(
                         alert.Type,
                         alert.Message,
@@ -1220,7 +1264,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     );
                 }
 
-                _log.Info($"Retrieved {roles.Count} role authorization records for UserId={userId}");
+                _log.Info($"Retrieved {roles.Count} role authorization records from cache for UserId={userId}");
 
                 return ServiceResult<IEnumerable<UserRoleMappingModel>>.Success(
                     roles,
@@ -1242,7 +1286,6 @@ namespace HISWEBAPI.Repositories.Implementations
         }
 
 
-
         public ServiceResult<string> SaveUpdateUserRightMapping(SaveUserRightMappingRequest request, AllGlobalValues globalValues)
         {
             try
@@ -1261,6 +1304,13 @@ namespace HISWEBAPI.Repositories.Implementations
                 });
 
                 _log.Info($"Deleted existing user rights for UserId={request.UserId}, BranchId={request.BranchId}, RoleId={request.RoleId}, TypeId={request.TypeId}");
+
+                // Generate cache key for this specific user right mapping
+                string cacheKey = $"_UserRightMapping_{request.BranchId}_{request.TypeId}_{request.UserId}_{request.RoleId}";
+
+                // Clear cache after delete
+                _distributedCache.Remove(cacheKey);
+                _log.Info($"Cleared cache for key: {cacheKey}");
 
                 // If UserRights list is empty or null, only delete operation was needed
                 if (request.UserRights == null || !request.UserRights.Any())
@@ -1342,32 +1392,65 @@ namespace HISWEBAPI.Repositories.Implementations
 
 
         public ServiceResult<IEnumerable<UserRightMappingModel>> GetAssignUserRightMapping(
-         int branchId,
-         int typeId,
-         int userId,
-         int roleId)
+            int branchId,
+            int typeId,
+            int userId,
+            int roleId)
         {
             try
             {
-                var dataTable = _sqlHelper.GetDataTable(
-                    "S_getAssignUserRightMapping",
-                    CommandType.StoredProcedure,
-                    new
-                    {
-                        @BranchId = branchId,
-                        @typeId = typeId,
-                        @UserId = userId,
-                        @RoleId = roleId
-                    }
-                );
+                _log.Info($"GetAssignUserRightMapping called. BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
 
-                var userRights = dataTable?.AsEnumerable().Select(row => new UserRightMappingModel
+                // Generate dynamic cache key based on branchId, typeId, userId, and roleId
+                string cacheKey = $"_UserRightMapping_{branchId}_{typeId}_{userId}_{roleId}";
+
+                // Try to get data from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<UserRightMappingModel> userRights;
+
+                if (!string.IsNullOrEmpty(cachedData))
                 {
-                    IsGranted = row.Field<int>("isGranted"),
-                    UserRightName = row.Field<string>("UserRightName") ?? string.Empty,
-                    Description = row.Field<string>("Description") ?? string.Empty,
-                    UserRightId = row.Field<int>("UserRightId")
-                }).ToList() ?? new List<UserRightMappingModel>();
+                    _log.Info($"UserRightMapping data retrieved from cache. Key={cacheKey}");
+                    userRights = System.Text.Json.JsonSerializer.Deserialize<List<UserRightMappingModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"UserRightMapping cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_getAssignUserRightMapping",
+                        CommandType.StoredProcedure,
+                        new
+                        {
+                            @BranchId = branchId,
+                            @typeId = typeId,
+                            @UserId = userId,
+                            @RoleId = roleId
+                        }
+                    );
+
+                    userRights = dataTable?.AsEnumerable().Select(row => new UserRightMappingModel
+                    {
+                        IsGranted = row.Field<int>("isGranted"),
+                        UserRightName = row.Field<string>("UserRightName") ?? string.Empty,
+                        Description = row.Field<string>("Description") ?? string.Empty,
+                        UserRightId = row.Field<int>("UserRightId")
+                    }).ToList() ?? new List<UserRightMappingModel>();
+
+                    // Store data in cache with no expiration
+                    if (userRights.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(userRights);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"UserRightMapping data cached permanently. Key={cacheKey}, Count={userRights.Count}");
+                    }
+                }
 
                 if (!userRights.Any())
                 {
@@ -1381,7 +1464,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     );
                 }
 
-                _log.Info($"Retrieved {userRights.Count} user rights mapping records");
+                _log.Info($"Retrieved {userRights.Count} user rights mapping records from cache");
 
                 return ServiceResult<IEnumerable<UserRightMappingModel>>.Success(
                     userRights,
@@ -1422,6 +1505,13 @@ namespace HISWEBAPI.Repositories.Implementations
                 });
 
                 _log.Info($"Deleted existing dashboard user rights for UserId={request.UserId}, BranchId={request.BranchId}, RoleId={request.RoleId}, TypeId={request.TypeId}");
+
+                // Generate cache key for this specific dashboard user right mapping
+                string cacheKey = $"_DashboardUserRightMapping_{request.BranchId}_{request.TypeId}_{request.UserId}_{request.RoleId}";
+
+                // Clear cache after delete
+                _distributedCache.Remove(cacheKey);
+                _log.Info($"Cleared cache for key: {cacheKey}");
 
                 // If DashboardUserRights list is empty or null, only delete operation was needed
                 if (request.DashboardUserRights == null || !request.DashboardUserRights.Any())
@@ -1511,25 +1601,58 @@ namespace HISWEBAPI.Repositories.Implementations
         {
             try
             {
-                var dataTable = _sqlHelper.GetDataTable(
-                    "S_getAssignDashBoardUserRight",
-                    CommandType.StoredProcedure,
-                    new
-                    {
-                        @BranchId = branchId,
-                        @TypeId = typeId,
-                        @UserId = userId,
-                        @RoleId = roleId
-                    }
-                );
+                _log.Info($"GetAssignDashBoardUserRight called. BranchId={branchId}, TypeId={typeId}, UserId={userId}, RoleId={roleId}");
 
-                var dashboardRights = dataTable?.AsEnumerable().Select(row => new DashboardUserRightMappingModel
+                // Generate dynamic cache key based on branchId, typeId, userId, and roleId
+                string cacheKey = $"_DashboardUserRightMapping_{branchId}_{typeId}_{userId}_{roleId}";
+
+                // Try to get data from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<DashboardUserRightMappingModel> dashboardRights;
+
+                if (!string.IsNullOrEmpty(cachedData))
                 {
-                    IsGranted = row.Field<int>("isGranted"),
-                    UserRightName = row.Field<string>("UserRightName") ?? string.Empty,
-                    Details = row.Field<string>("Details") ?? string.Empty,
-                    UserRightId = row.Field<int>("UserRightId")
-                }).ToList() ?? new List<DashboardUserRightMappingModel>();
+                    _log.Info($"DashboardUserRightMapping data retrieved from cache. Key={cacheKey}");
+                    dashboardRights = System.Text.Json.JsonSerializer.Deserialize<List<DashboardUserRightMappingModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"DashboardUserRightMapping cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_getAssignDashBoardUserRight",
+                        CommandType.StoredProcedure,
+                        new
+                        {
+                            @BranchId = branchId,
+                            @TypeId = typeId,
+                            @UserId = userId,
+                            @RoleId = roleId
+                        }
+                    );
+
+                    dashboardRights = dataTable?.AsEnumerable().Select(row => new DashboardUserRightMappingModel
+                    {
+                        IsGranted = row.Field<int>("isGranted"),
+                        UserRightName = row.Field<string>("UserRightName") ?? string.Empty,
+                        Details = row.Field<string>("Details") ?? string.Empty,
+                        UserRightId = row.Field<int>("UserRightId")
+                    }).ToList() ?? new List<DashboardUserRightMappingModel>();
+
+                    // Store data in cache with no expiration
+                    if (dashboardRights.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(dashboardRights);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"DashboardUserRightMapping data cached permanently. Key={cacheKey}, Count={dashboardRights.Count}");
+                    }
+                }
 
                 if (!dashboardRights.Any())
                 {
@@ -1543,7 +1666,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     );
                 }
 
-                _log.Info($"Retrieved {dashboardRights.Count} dashboard user rights mapping records");
+                _log.Info($"Retrieved {dashboardRights.Count} dashboard user rights mapping records from cache");
 
                 return ServiceResult<IEnumerable<DashboardUserRightMappingModel>>.Success(
                     dashboardRights,
@@ -1566,7 +1689,6 @@ namespace HISWEBAPI.Repositories.Implementations
 
 
 
-
         public ServiceResult<NavigationTabMasterResponse> CreateUpdateNavigationTabMaster(NavigationTabMasterRequest request, AllGlobalValues globalValues)
         {
             try
@@ -1583,7 +1705,6 @@ namespace HISWEBAPI.Repositories.Implementations
                 };
                 int result = (int)_sqlHelper.RunProcedureInsert("IU_NavigationTabMaster", parameters);
 
-                _distributedCache.Remove("_NavigationTabMaster_All");
                 if (result == -1)
                 {
                     var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
@@ -1639,50 +1760,19 @@ namespace HISWEBAPI.Repositories.Implementations
             {
                 _log.Info("GetNavigationTabMaster called.");
 
-                // Define cache key inside the method
-                string cacheKey = "_NavigationTabMaster_All";
+                // Fetch data from database using stored procedure
+                var dataTable = _sqlHelper.GetDataTable(
+                    "S_GetNavigationTabMaster",
+                    CommandType.StoredProcedure
+                );
 
-                // Try to get data from Redis cache
-                var cachedData = _distributedCache.GetString(cacheKey);
-                List<NavigationTabMasterModel> navigationTabs;
-
-                if (!string.IsNullOrEmpty(cachedData))
+                var navigationTabs = dataTable?.AsEnumerable().Select(row => new NavigationTabMasterModel
                 {
-                    _log.Info($"NavigationTabMaster data retrieved from cache. Key={cacheKey}");
-                    navigationTabs = System.Text.Json.JsonSerializer.Deserialize<List<NavigationTabMasterModel>>(cachedData);
-                }
-                else
-                {
-                    _log.Info($"NavigationTabMaster cache miss. Fetching data from database. Key={cacheKey}");
-
-                    // Fetch data from database using stored procedure
-                    var dataTable = _sqlHelper.GetDataTable(
-                        "S_GetNavigationTabMaster",
-                        CommandType.StoredProcedure
-                    );
-
-                    navigationTabs = dataTable?.AsEnumerable().Select(row => new NavigationTabMasterModel
-                    {
-                        TabId = row.Field<int>("TabId"),
-                        TabName = row.Field<string>("TabName") ?? string.Empty,
-                        FaIconId = row.Field<int>("FaIconId"),
-                        IsActive = row.Field<int>("IsActive")
-                    }).ToList() ?? new List<NavigationTabMasterModel>();
-
-                    // Store data in Redis cache with unlimited time span (no expiration)
-                    if (navigationTabs.Any())
-                    {
-                        var serialized = System.Text.Json.JsonSerializer.Serialize(navigationTabs);
-                        var cacheOptions = new DistributedCacheEntryOptions
-                        {
-                            // No expiration - cache persists until manually cleared
-                            AbsoluteExpiration = null,
-                            SlidingExpiration = null
-                        };
-                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
-                        _log.Info($"NavigationTabMaster data cached permanently. Key={cacheKey}, Count={navigationTabs.Count}");
-                    }
-                }
+                    TabId = row.Field<int>("TabId"),
+                    TabName = row.Field<string>("TabName") ?? string.Empty,
+                    FaIconId = row.Field<int>("FaIconId"),
+                    IsActive = row.Field<int>("IsActive")
+                }).ToList() ?? new List<NavigationTabMasterModel>();
 
                 if (!navigationTabs.Any())
                 {
@@ -1696,7 +1786,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 }
 
                 var alert1 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_COMPLETED_SUCCESSFULLY");
-                _log.Info($"Retrieved {navigationTabs.Count} navigation tab(s) from cache");
+                _log.Info($"Retrieved {navigationTabs.Count} navigation tab(s) from database");
 
                 return ServiceResult<IEnumerable<NavigationTabMasterModel>>.Success(
                     navigationTabs,
