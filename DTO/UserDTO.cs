@@ -217,5 +217,32 @@ namespace HISWEBAPI.DTO
         [Required(ErrorMessage = "UserId is required")]
         public int UserId { get; set; }
     }
+    public class SaveUserFavoriteRolesRequest
+    {
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
+
+      
+        [Required(ErrorMessage = "RoleIds is required")]
+        public List<int> RoleIds { get; set; } = new List<int>();
+    }
+
+    public class SaveRoleWiseUserFavoriteSubMenuRequest
+    {
+        [Required(ErrorMessage = "UserId is required")]
+        public int UserId { get; set; }
+
+        [Required(ErrorMessage = "RoleId is required")]
+        public int RoleId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "SubMenuId is required")]
+        public int SubMenuId { get; set; }
+    }
 
 }

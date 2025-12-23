@@ -46,6 +46,10 @@ namespace HISWEBAPI.DTO
 
         [Required(ErrorMessage = "FaIconId is required")]
         public int FaIconId { get; set; } = 0;
+
+        [Required(ErrorMessage = "Image Path is required")]
+        [StringLength(256, ErrorMessage = "Image Path cannot exceed 256 characters")]
+        public string ImagePath { get; set; }
     }
 
     public class UserMasterRequest

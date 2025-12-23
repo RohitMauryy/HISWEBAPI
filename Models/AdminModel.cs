@@ -31,6 +31,7 @@
         public int IsActive { get; set; }
         public string? IconClass { get; set; }
         public string? IconName { get; set; }
+        public string? ImagePath { get; set; }
         public string? CreatedBy { get; set; }
         public string? CreatedOn { get; set; }
         public string? LastModifiedBy { get; set; }

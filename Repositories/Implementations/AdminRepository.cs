@@ -48,6 +48,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     @roleName = request.RoleName,
                     @isActive = request.IsActive,
                     @faIconId = request.FaIconId,
+                    @imagePath = request.ImagePath,
                     @userId = globalValues.userId,
                     @IpAddress = globalValues.ipAddress
                 },
@@ -182,6 +183,7 @@ namespace HISWEBAPI.Repositories.Implementations
                         IsActive = row.Field<int>("IsActive"),
                         IconName = row.Field<string>("IconName"),
                         IconClass = row.Field<string>("IconClass"),
+                        ImagePath = row.Field<string>("ImagePath"),
                         CreatedBy = row.Field<string>("CreatedBy"),
                         CreatedOn = row.Field<string>("CreatedOn"),
                         LastModifiedBy = row.Field<string>("LastModifiedBy"),

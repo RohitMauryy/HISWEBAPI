@@ -718,7 +718,9 @@ namespace HISWEBAPI.Repositories.Implementations
                 {
                     RoleId = row.Field<int>("RoleId"),
                     RoleName = row.Field<string>("RoleName"),
-                    IconClass = row.Field<string>("IconClass")
+                    IconClass = row.Field<string>("IconClass"),
+                    ImagePath = row.Field<string>("ImagePath"),
+                    IsFavoriteRole = row.Field<int>("isFavoriteRole")
                 }).ToList() ?? new List<UserRoleModel>();
 
                 if (!roles.Any())
@@ -1053,10 +1055,21 @@ namespace HISWEBAPI.Repositories.Implementations
                         TabId = row.Field<int>("TabId")
                     }).ToList() ?? new List<UserSubMenuModel>();
 
+                    // Map SubMenus (Second result set)
+                    var favoriteTable = dataSet.Tables[2];
+                    var favoriteSubMenus = favoriteTable?.AsEnumerable().Select(row => new UserSubMenuModel
+                    {
+                        SubMenuId = row.Field<int>("SubMenuId"),
+                        SubMenuName = row.Field<string>("SubMenuName") ?? string.Empty,
+                        URL = row.Field<string>("URL") ?? string.Empty
+                    }).ToList() ?? new List<UserSubMenuModel>();
+
+
                     mappingResponse = new UserTabMenuMappingResponse
                     {
                         Tabs = tabs,
-                        SubMenus = subMenus
+                        SubMenus = subMenus,
+                        favoriteSubMenus= favoriteSubMenus
                     };
 
                     // Cache the data permanently (no expiration)
@@ -1108,8 +1121,155 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
+        public ServiceResult<string> SaveUserFavoriteRoles(SaveUserFavoriteRolesRequest request, AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"SaveUserFavoriteRoles called. BranchId={request.BranchId}, UserId={request.UserId}, RoleIds Count={request.RoleIds.Count}");
 
+                // Convert List<int> to comma-separated string
+                string roleIdsString = string.Join(",", request.RoleIds);
 
+                var dataTable = _sqlHelper.GetDataTable(
+                    "I_SaveUserWiseFavoriteRoles",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        BranchId = request.BranchId,
+                        UserId = request.UserId,
+                        RoleIds = roleIdsString,
+                        CreatedBy = globalValues.userId,
+                        IpAddress = globalValues.ipAddress
+                    }
+                );
+
+                if (dataTable == null || dataTable.Rows.Count == 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                    _log.Error("No result returned from stored procedure");
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        500
+                    );
+                }
+
+                int result = Convert.ToInt32(dataTable.Rows[0]["Result"]);
+                string message = Convert.ToString(dataTable.Rows[0]["Message"]);
+                int insertedCount = dataTable.Rows[0]["InsertedCount"] != DBNull.Value
+                    ? Convert.ToInt32(dataTable.Rows[0]["InsertedCount"])
+                    : 0;
+
+                if (result == 1)
+                {
+                    // Clear cache for user's favorite roles
+                    string cacheKey = $"_UserFavoriteRoles_{request.BranchId}_{request.UserId}";
+                    _distributedCache.Remove(cacheKey);
+                    _log.Info($"Cleared cache for key: {cacheKey}");
+
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
+                    _log.Info($"User favorite roles saved successfully: {message}, Inserted Count: {insertedCount}");
+
+                    return ServiceResult<string>.Success(
+                        $"{insertedCount} favorite role(s) saved successfully",
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+                else
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("OPERATION_FAILED");
+                    _log.Error($"Failed to save user favorite roles: {message}");
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        message,
+                        500
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<string>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<string> SaveRoleWiseUserFavoriteSubMenu(SaveRoleWiseUserFavoriteSubMenuRequest request, AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"SaveRoleWiseUserFavoriteSubMenu called. BranchId={request.BranchId}, UserId={request.UserId}, RoleId={request.RoleId}, SubMenuId={request.SubMenuId}");
+
+                var dataTable = _sqlHelper.GetDataTable(
+                    "I_SaveRoleWiseUserFavoriteSubMenu",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        BranchId = request.BranchId,
+                        UserId = request.UserId,
+                        RoleId = request.RoleId,
+                        SubMenuId = request.SubMenuId,
+                        CreatedBy = globalValues.userId,
+                        IpAddress = globalValues.ipAddress
+                    }
+                );
+
+                string cacheKey2 = $"_UserTabMenu_{request.BranchId}_{request.RoleId}_{request.UserId}";
+                // Clear cache after delete
+                _distributedCache.Remove(cacheKey2);
+                if (dataTable == null || dataTable.Rows.Count == 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                    _log.Error("No result returned from stored procedure");
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        500
+                    );
+                }
+
+                int result = Convert.ToInt32(dataTable.Rows[0]["Result"]);
+                string message = Convert.ToString(dataTable.Rows[0]["Message"]);
+
+                if (result == 1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
+                    _log.Info($"Favorite submenu saved successfully: {message}");
+                    return ServiceResult<string>.Success(
+                        "Favorite submenu saved successfully",
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+                else
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("OPERATION_FAILED");
+                    _log.Error($"Failed to save favorite submenu: {message}");
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        message,
+                        500
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<string>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
         #endregion
     }
 }

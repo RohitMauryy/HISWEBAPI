@@ -17,6 +17,10 @@ namespace HISWEBAPI.Repositories.Interfaces
         ServiceResult<string> UpdatePassword(UpdatePasswordRequest request);
         ServiceResult<IEnumerable<UserRoleModel>> GetUserRoles(UserRoleRequest request);
         ServiceResult<UserTabMenuMappingResponse> GetUserTabAndSubMenuMapping(int roleId, int branchId, int userId);
+        ServiceResult<string> SaveUserFavoriteRoles(SaveUserFavoriteRolesRequest request, AllGlobalValues globalValues);
+        ServiceResult<string> SaveRoleWiseUserFavoriteSubMenu(SaveRoleWiseUserFavoriteSubMenuRequest request, AllGlobalValues globalValues);
+
+
 
     }
 }

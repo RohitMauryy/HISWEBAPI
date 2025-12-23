@@ -423,5 +423,209 @@ namespace HISWEBAPI.Controllers
                 data = serviceResult.Data
             });
         }
+
+        [HttpPost("saveUserFavoriteRoles")]
+        [Authorize]
+        public IActionResult SaveUserFavoriteRoles([FromBody] SaveUserFavoriteRolesRequest request)
+        {
+            _log.Info($"SaveUserFavoriteRoles called. BranchId={request.BranchId}, UserId={request.UserId}, RoleIds Count={request.RoleIds.Count}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for save user favorite roles.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Validate BranchId
+            if (request.BranchId <= 0)
+            {
+                _log.Warn("Invalid BranchId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "BranchId must be greater than 0",
+                    errors = new { branchId = request.BranchId }
+                });
+            }
+
+            // Validate UserId
+            if (request.UserId <= 0)
+            {
+                _log.Warn("Invalid UserId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "UserId must be greater than 0",
+                    errors = new { userId = request.UserId }
+                });
+            }
+
+            // Validate RoleIds list (can be empty to remove all favorites)
+            if (request.RoleIds == null)
+            {
+                _log.Warn("RoleIds list is null.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "RoleIds list cannot be null (use empty list to remove all favorites)",
+                    errors = new { roleIds = "null" }
+                });
+            }
+
+            // Validate each RoleId in the list
+            if (request.RoleIds.Any(roleId => roleId <= 0))
+            {
+                _log.Warn("One or more invalid RoleIds provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "All RoleIds must be greater than 0",
+                    errors = new { invalidRoleIds = request.RoleIds.Where(r => r <= 0).ToList() }
+                });
+            }
+
+            // Check for duplicate RoleIds
+            var duplicateRoleIds = request.RoleIds
+                .GroupBy(x => x)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToList();
+
+            if (duplicateRoleIds.Any())
+            {
+                _log.Warn($"Duplicate RoleIds found: {string.Join(", ", duplicateRoleIds)}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "Duplicate RoleIds are not allowed",
+                    errors = new { duplicateRoleIds }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _userRepository.SaveUserFavoriteRoles(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"User favorite roles saved successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"User favorite roles save failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpPost("saveRoleWiseUserFavoriteSubMenu")]
+        [Authorize]
+        public IActionResult SaveRoleWiseUserFavoriteSubMenu([FromBody] SaveRoleWiseUserFavoriteSubMenuRequest request)
+        {
+            _log.Info($"SaveRoleWiseUserFavoriteSubMenu called. BranchId={request.BranchId}, UserId={request.UserId}, RoleId={request.RoleId}, SubMenuId={request.SubMenuId}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for save favorite submenu.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Validate UserId
+            if (request.UserId <= 0)
+            {
+                _log.Warn("Invalid UserId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "UserId must be greater than 0",
+                    errors = new { userId = request.UserId }
+                });
+            }
+
+            // Validate RoleId
+            if (request.RoleId <= 0)
+            {
+                _log.Warn("Invalid RoleId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "RoleId must be greater than 0",
+                    errors = new { roleId = request.RoleId }
+                });
+            }
+
+            // Validate BranchId
+            if (request.BranchId <= 0)
+            {
+                _log.Warn("Invalid BranchId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "BranchId must be greater than 0",
+                    errors = new { branchId = request.BranchId }
+                });
+            }
+
+            // Validate SubMenuId
+            if (request.SubMenuId <= 0)
+            {
+                _log.Warn("Invalid SubMenuId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "SubMenuId must be greater than 0",
+                    errors = new { subMenuId = request.SubMenuId }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _userRepository.SaveRoleWiseUserFavoriteSubMenu(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Favorite submenu saved successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"Favorite submenu save failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
     }
 }

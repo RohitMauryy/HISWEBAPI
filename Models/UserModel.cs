@@ -5,6 +5,8 @@
         public int RoleId { get; set; }
         public string RoleName { get; set; }
         public string IconClass { get; set; }
+        public string ImagePath { get; set; }
+        public int IsFavoriteRole { get; set; }
     }
 
     public class UserLoginResponseData
@@ -72,5 +74,6 @@
     {
         public List<UserTabModel> Tabs { get; set; }
         public List<UserSubMenuModel> SubMenus { get; set; }
+        public List<UserSubMenuModel> favoriteSubMenus { get; set; }
     }
 }
