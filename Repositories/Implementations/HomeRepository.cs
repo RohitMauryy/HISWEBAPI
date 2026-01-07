@@ -530,7 +530,6 @@ namespace HISWEBAPI.Repositories.Implementations
                         DistrictId = row.Field<int>("DistrictId"),
                         CityId = row.Field<int>("CityId"),
                         CityName = row.Field<string>("CityName") ?? string.Empty,
-                        Pincode = row.Field<string>("Pincode") ?? string.Empty,
                         IsActive = row.Field<int>("IsActive")
                     }).ToList() ?? new List<CityMasterModel>();
 

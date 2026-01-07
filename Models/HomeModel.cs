@@ -34,7 +34,6 @@
         public int DistrictId { get; set; }
         public int CityId { get; set; }
         public string CityName { get; set; }
-        public string Pincode { get; set; }
         public int IsActive { get; set; }
     }
 
