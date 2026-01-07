@@ -3260,7 +3260,6 @@ namespace HISWEBAPI.Repositories.Implementations
                         StateId = request.StateId,
                         CountryId = request.CountryId,
                         CityName = request.CityName,
-                        Pincode = request.Pincode,
                         IsActive = request.IsActive,
                         UserId = globalValues.userId,
                         IpAddress = globalValues.ipAddress
@@ -3305,16 +3304,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     );
                 }
 
-                if (result == -3)
-                {
-                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
-                    _log.Warn($"Invalid pincode format: {request.Pincode}");
-                    return ServiceResult<int>.Failure(
-                        alert.Type,
-                        "Pincode must be exactly 6 digits",
-                        400
-                    );
-                }
+              
 
                 if (result > 0)
                 {

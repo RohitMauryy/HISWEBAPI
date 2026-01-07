@@ -1678,23 +1678,6 @@ namespace HISWEBAPI.Controllers
                 });
             }
 
-            // Additional validation for Pincode if provided
-            if (!string.IsNullOrEmpty(request.Pincode))
-            {
-                if (request.Pincode.Length != 6 || !request.Pincode.All(char.IsDigit))
-                {
-                    _log.Warn($"Invalid pincode format: {request.Pincode}");
-                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
-                    return BadRequest(new
-                    {
-                        result = false,
-                        messageType = alert.Type,
-                        message = "Pincode must be exactly 6 digits",
-                        errors = new { pincode = request.Pincode }
-                    });
-                }
-            }
-
             var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
             var serviceResult = _adminRepository.CreateUpdateCityMaster(request, globalValues);
 

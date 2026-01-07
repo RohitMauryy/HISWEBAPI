@@ -568,7 +568,6 @@ namespace HISWEBAPI.DTO
         [StringLength(100, ErrorMessage = "CityName cannot exceed 100 characters")]
         public string CityName { get; set; }
 
-        public string Pincode { get; set; } 
 
         [Required(ErrorMessage = "IsActive is required")]
         public int IsActive { get; set; }
