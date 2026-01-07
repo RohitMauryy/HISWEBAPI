@@ -304,6 +304,56 @@ namespace HISWEBAPI.Controllers
             });
         }
 
+
+        [HttpGet("getPincodeMaster")]
+        [Authorize]
+        public IActionResult GetPincodeMaster([FromQuery] int cityId, [FromQuery] int? isActive = null)
+        {
+            _log.Info($"GetPincodeMaster called. CityId={cityId}, IsActive={isActive?.ToString() ?? "All"}");
+
+            if (cityId <= 0)
+            {
+                _log.Warn("Invalid CityId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "CityId must be greater than 0",
+                    errors = new { cityId }
+                });
+            }
+
+            // Validate IsActive parameter if provided
+            if (isActive.HasValue && isActive.Value != 0 && isActive.Value != 1)
+            {
+                _log.Warn($"Invalid IsActive parameter: {isActive.Value}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 (Inactive), 1 (Active), or null (All)",
+                    errors = new { isActive }
+                });
+            }
+
+            var serviceResult = _homeRepository.GetPincodeMaster(cityId, isActive);
+
+            if (serviceResult.Result)
+                _log.Info($"Pincodes fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No pincodes found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
         [HttpGet("getAllInsuranceCompanyList")]
         [Authorize]
         public IActionResult GetAllInsuranceCompanyList()

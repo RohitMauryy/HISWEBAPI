@@ -37,4 +37,12 @@
         public string Pincode { get; set; }
         public int IsActive { get; set; }
     }
+
+    public class PincodeMasterModel
+    {
+        public int CityId { get; set; }
+        public int PincodeId { get; set; }
+        public int Pincode { get; set; }
+        public int IsActive { get; set; }
+    }
 }

@@ -1694,5 +1694,84 @@ namespace HISWEBAPI.Controllers
                 data = new { cityId = serviceResult.Data }
             });
         }
+
+
+        [HttpPost("createUpdatePincodeMaster")]
+        [Authorize]
+        public IActionResult CreateUpdatePincodeMaster([FromBody] CreateUpdatePincodeMasterRequest request)
+        {
+            _log.Info($"CreateUpdatePincodeMaster called. PincodeId={request.PincodeId}, CityId={request.CityId}, Pincode={request.Pincode}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for pincode master insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Additional validation for CityId
+            if (request.CityId <= 0)
+            {
+                _log.Warn("Invalid CityId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "CityId must be greater than 0",
+                    errors = new { cityId = request.CityId }
+                });
+            }
+
+            // Validate Pincode is exactly 6 digits
+            if (request.Pincode < 100000 || request.Pincode > 999999)
+            {
+                _log.Warn($"Invalid Pincode provided: {request.Pincode}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "Pincode must be exactly 6 digits",
+                    errors = new { pincode = request.Pincode }
+                });
+            }
+
+            // Validate IsActive value
+            if (request.IsActive != 0 && request.IsActive != 1)
+            {
+                _log.Warn("Invalid IsActive value provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 or 1",
+                    errors = new { isActive = request.IsActive }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdatePincodeMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Pincode master operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"Pincode master operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = new { pincodeId = serviceResult.Data }
+            });
+        }
     }
 }

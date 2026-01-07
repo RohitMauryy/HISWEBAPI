@@ -14,6 +14,7 @@ namespace HISWEBAPI.Repositories.Interfaces
         ServiceResult<IEnumerable<StateMasterModel>> GetStateMaster(int countryId, int? isActive);
         ServiceResult<IEnumerable<DistrictMasterModel>> GetDistrictMaster(int stateId, int? isActive);
         ServiceResult<IEnumerable<CityMasterModel>> GetCityMaster(int districtId, int? isActive);
+        ServiceResult<IEnumerable<PincodeMasterModel>> GetPincodeMaster(int cityId, int? isActive);
         ServiceResult<IEnumerable<InsuranceCompanyModel>> GetAllInsuranceCompanyList();
         ServiceResult<IEnumerable<CorporateModel>> GetCorporateListByInsuranceCompanyId(int? insuranceCompanyId, int? isActive);
 

@@ -3342,7 +3342,119 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-        // Helper methods to clear cache
+
+      
+        public ServiceResult<int> CreateUpdatePincodeMaster(CreateUpdatePincodeMasterRequest request, AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdatePincodeMaster called. PincodeId={request.PincodeId}, CityId={request.CityId}, Pincode={request.Pincode}");
+
+                var dataTable = _sqlHelper.GetDataTable(
+                    "IU_PincodeMaster",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        PincodeId = request.PincodeId,
+                        CityId = request.CityId,
+                        Pincode = request.Pincode,
+                        IsActive = request.IsActive,
+                        UserId = globalValues.userId,
+                        IpAddress = globalValues.ipAddress
+                    }
+                );
+
+                if (dataTable == null || dataTable.Rows.Count == 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                    _log.Error("No result returned from stored procedure");
+                    return ServiceResult<int>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        500
+                    );
+                }
+
+                int result = Convert.ToInt32(dataTable.Rows[0]["Result"]);
+
+                // Clear all pincode-related cache keys
+                ClearPincodeMasterCache(request.CityId);
+
+                if (result == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Duplicate pincode: {request.Pincode} for CityId={request.CityId}");
+                    return ServiceResult<int>.Failure(
+                        alert.Type,
+                        $"Pincode '{request.Pincode}' already exists for this city",
+                        409
+                    );
+                }
+
+                if (result == -2)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Warn($"PincodeId not found: {request.PincodeId}");
+                    return ServiceResult<int>.Failure(
+                        alert.Type,
+                        "Pincode record not found",
+                        404
+                    );
+                }
+
+                if (result > 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.PincodeId <= 0 ? "DATA_SAVED_SUCCESSFULLY" : "DATA_UPDATED_SUCCESSFULLY"
+                    );
+
+                    _log.Info($"Pincode {(request.PincodeId <= 0 ? "created" : "updated")} successfully. PincodeId={result}. Cache cleared.");
+
+                    return ServiceResult<int>.Success(
+                        result,
+                        alert.Type,
+                        alert.Message,
+                        request.PincodeId <= 0 ? 201 : 200
+                    );
+                }
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_FAILED");
+                _log.Error($"Operation failed with result: {result}");
+                return ServiceResult<int>.Failure(
+                    alert1.Type,
+                    alert1.Message,
+                    500
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<int>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        // Helper method to clear cache
+        private void ClearPincodeMasterCache(int cityId)
+        {
+            try
+            {
+                // Clear all possible cache keys for this city's pincodes
+                _distributedCache.Remove($"_PincodeMaster_City{cityId}_All");
+                _distributedCache.Remove($"_PincodeMaster_City{cityId}_1");
+                _distributedCache.Remove($"_PincodeMaster_City{cityId}_0");
+                _log.Info($"Cleared PincodeMaster cache for CityId={cityId}");
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error clearing PincodeMaster cache: {ex.Message}");
+            }
+        }
+
         private void ClearStateMasterCache(int countryId)
         {
             try

@@ -580,6 +580,90 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
+
+        public ServiceResult<IEnumerable<PincodeMasterModel>> GetPincodeMaster(int cityId, int? isActive)
+        {
+            try
+            {
+                _log.Info($"GetPincodeMaster called. CityId={cityId}, IsActive={isActive?.ToString() ?? "All"}");
+
+                // Generate dynamic cache key based on cityId and isActive
+                string cacheKey = $"_PincodeMaster_City{cityId}_{(isActive.HasValue ? isActive.Value.ToString() : "All")}";
+
+                // Try to get data from Redis cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<PincodeMasterModel> pincodes;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"PincodeMaster data retrieved from cache. Key={cacheKey}");
+                    pincodes = System.Text.Json.JsonSerializer.Deserialize<List<PincodeMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"PincodeMaster cache miss. Fetching data from database. Key={cacheKey}");
+
+                    // Fetch data from database
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetPincodeMaster",
+                        CommandType.StoredProcedure,
+                        new { CityId = cityId, IsActive = isActive }
+                    );
+
+                    pincodes = dataTable?.AsEnumerable().Select(row => new PincodeMasterModel
+                    {
+                        CityId = row.Field<int>("CityId"),
+                        PincodeId = row.Field<int>("PincodeId"),
+                        Pincode = row.Field<int>("Pincode"),
+                        IsActive = row.Field<int>("IsActive")
+                    }).ToList() ?? new List<PincodeMasterModel>();
+
+                    // Store data in Redis cache (permanent until manually cleared)
+                    if (pincodes.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(pincodes);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"PincodeMaster data cached permanently. Key={cacheKey}, Count={pincodes.Count}");
+                    }
+                }
+
+                if (!pincodes.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No pincodes found for CityId={cityId}, IsActive: {isActive?.ToString() ?? "All"}");
+                    return ServiceResult<IEnumerable<PincodeMasterModel>>.Failure(
+                        alert.Type,
+                        $"No pincodes found for CityId: {cityId}",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {pincodes.Count} pincode(s) from cache");
+
+                return ServiceResult<IEnumerable<PincodeMasterModel>>.Success(
+                    pincodes,
+                    "Info",
+                    $"{pincodes.Count} pincode(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<PincodeMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
         public ServiceResult<IEnumerable<InsuranceCompanyModel>> GetAllInsuranceCompanyList()
         {
             try

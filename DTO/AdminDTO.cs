@@ -572,4 +572,19 @@ namespace HISWEBAPI.DTO
         [Required(ErrorMessage = "IsActive is required")]
         public int IsActive { get; set; }
     }
+
+    public class CreateUpdatePincodeMasterRequest
+    {
+        public int PincodeId { get; set; } = 0; // 0 = create, >0 = update
+
+        [Required(ErrorMessage = "CityId is required")]
+        public int CityId { get; set; }
+
+        [Required(ErrorMessage = "Pincode is required")]
+        [Range(100000, 999999, ErrorMessage = "Pincode must be exactly 6 digits")]
+        public int Pincode { get; set; }
+
+        [Required(ErrorMessage = "IsActive is required")]
+        public int IsActive { get; set; }
+    }
 }

@@ -49,6 +49,14 @@ namespace HISWEBAPI.DTO
         public int DistrictId { get; set; }
     }
 
+    public class GetPincodeMasterRequest
+    {
+        public int? IsActive { get; set; }
+
+        [Required(ErrorMessage = "CityId is required")]
+        public int CityId { get; set; }
+    }
+
     public class InsuranceCompanyModel
     {
         public int InsuranceCompanyId { get; set; }
