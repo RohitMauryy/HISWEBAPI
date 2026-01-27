@@ -151,6 +151,72 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
+        //public ServiceResult<IEnumerable<PickListModel>> GetPickListMaster(string fieldName)
+        //{
+        //    try
+        //    {
+        //        if (string.IsNullOrWhiteSpace(fieldName))
+        //        {
+        //            var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+        //             _log.Warn("GetPickListMaster called with empty fieldName");
+
+        //            return ServiceResult<IEnumerable<PickListModel>>.Failure(
+        //                alert.Type,
+        //                "Field name is required",
+        //                400
+        //            );
+        //        }
+
+        //        var dataTable = _sqlHelper.GetDataTable(
+        //            "S_GetPickListMaster",
+        //            CommandType.StoredProcedure,
+        //            new { fieldName = fieldName }
+        //        );
+
+        //        var pickList = dataTable?.AsEnumerable().Select(row => new PickListModel
+        //        {
+        //            id = row.Field<int>("Id"),
+        //            fieldName = row.Field<string>("FieldName"),
+        //            value = row.Field<string>("Value"),
+        //            key = row.Field<string>("Key")
+        //        }).ToList() ?? new List<PickListModel>();
+
+        //        if (!pickList.Any())
+        //        {
+        //            var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+        //             _log.Info($"No picklist items found for field: {fieldName}");
+
+        //            return ServiceResult<IEnumerable<PickListModel>>.Failure(
+        //                alert.Type,
+        //                $"No data found for field: {fieldName}",
+        //                404
+        //            );
+        //        }
+
+        //         _log.Info($"Retrieved {pickList.Count} picklist items for field: {fieldName}");
+
+        //        return ServiceResult<IEnumerable<PickListModel>>.Success(
+        //            pickList,
+        //            "Info",
+        //            $"{pickList.Count} item(s) retrieved successfully",
+        //            200
+        //        );
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+        //        var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+        //        return ServiceResult<IEnumerable<PickListModel>>.Failure(
+        //            alert.Type,
+        //            alert.Message,
+        //            500
+        //        );
+        //    }
+        //}
+
+        // Repositories/Implementations/HomeRepository.cs
+        // Replace the existing GetPickListMaster method with this cached version
+
         public ServiceResult<IEnumerable<PickListModel>> GetPickListMaster(string fieldName)
         {
             try
@@ -158,7 +224,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 if (string.IsNullOrWhiteSpace(fieldName))
                 {
                     var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
-                     _log.Warn("GetPickListMaster called with empty fieldName");
+                    _log.Warn("GetPickListMaster called with empty fieldName");
 
                     return ServiceResult<IEnumerable<PickListModel>>.Failure(
                         alert.Type,
@@ -167,24 +233,55 @@ namespace HISWEBAPI.Repositories.Implementations
                     );
                 }
 
-                var dataTable = _sqlHelper.GetDataTable(
-                    "S_GetPickListMaster",
-                    CommandType.StoredProcedure,
-                    new { fieldName = fieldName }
-                );
+                _log.Info($"GetPickListMaster called. FieldName={fieldName}");
 
-                var pickList = dataTable?.AsEnumerable().Select(row => new PickListModel
+                // Generate dynamic cache key based on fieldName
+                string cacheKey = $"_PickListMaster_{fieldName}";
+
+                // Try to get data from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<PickListModel> pickList;
+
+                if (!string.IsNullOrEmpty(cachedData))
                 {
-                    id = row.Field<int>("Id"),
-                    fieldName = row.Field<string>("FieldName"),
-                    value = row.Field<string>("Value"),
-                    key = row.Field<string>("Key")
-                }).ToList() ?? new List<PickListModel>();
+                    _log.Info($"PickListMaster data retrieved from cache. Key={cacheKey}");
+                    pickList = System.Text.Json.JsonSerializer.Deserialize<List<PickListModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"PickListMaster cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetPickListMaster",
+                        CommandType.StoredProcedure,
+                        new { fieldName = fieldName }
+                    );
+
+                    pickList = dataTable?.AsEnumerable().Select(row => new PickListModel
+                    {
+                        value = row.Field<string>("Value"),
+                        key = row.Field<string>("Key")
+                    }).ToList() ?? new List<PickListModel>();
+
+                    // Store data in cache (permanent until manually cleared)
+                    if (pickList.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(pickList);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"PickListMaster data cached permanently. Key={cacheKey}, Count={pickList.Count}");
+                    }
+                }
 
                 if (!pickList.Any())
                 {
                     var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
-                     _log.Info($"No picklist items found for field: {fieldName}");
+                    _log.Info($"No picklist items found for field: {fieldName}");
 
                     return ServiceResult<IEnumerable<PickListModel>>.Failure(
                         alert.Type,
@@ -193,7 +290,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     );
                 }
 
-                 _log.Info($"Retrieved {pickList.Count} picklist items for field: {fieldName}");
+                _log.Info($"Retrieved {pickList.Count} picklist items from cache for field: {fieldName}");
 
                 return ServiceResult<IEnumerable<PickListModel>>.Success(
                     pickList,
@@ -845,6 +942,303 @@ namespace HISWEBAPI.Repositories.Implementations
                     500
                 );
             }
+        }
+
+
+        public ServiceResult<FileStreamResult> GetFile(string filePath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(filePath))
+                {
+                    _log.Warn("File path is null or empty");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    return ServiceResult<FileStreamResult>.Failure(
+                        alert.Type,
+                        "File path is required",
+                        400
+                    );
+                }
+
+                // Security: Prevent path traversal attacks
+                if (filePath.Contains("..") || filePath.Contains("~"))
+                {
+                    _log.Warn($"Potential path traversal attack detected: {filePath}");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    return ServiceResult<FileStreamResult>.Failure(
+                        alert.Type,
+                        "Invalid file path",
+                        400
+                    );
+                }
+
+                // Get base DMS path
+                string baseDmsPath = _configuration.GetValue<string>("DMS:RootPath") ?? "D:\\DMS";
+
+                // Handle both relative and absolute paths
+                string fullFilePath;
+                if (Path.IsPathRooted(filePath))
+                {
+                    fullFilePath = filePath.Replace("/", "\\");
+                }
+                else
+                {
+                    fullFilePath = Path.Combine(baseDmsPath, filePath.Replace("/", "\\"));
+                }
+
+                // Check if file exists
+                if (!File.Exists(fullFilePath))
+                {
+                    _log.Warn($"File not found: {fullFilePath}");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    return ServiceResult<FileStreamResult>.Failure(
+                        alert.Type,
+                        "File not found",
+                        404
+                    );
+                }
+
+                // Get file extension and MIME type
+                string fileExtension = Path.GetExtension(fullFilePath).ToLower();
+                string contentType = GetContentType(fileExtension);
+                string fileName = Path.GetFileName(fullFilePath);
+
+                // Create file stream
+                var fileStream = new FileStream(fullFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+                var result = new FileStreamResult
+                {
+                    FileStream = fileStream,
+                    ContentType = contentType,
+                    FileName = fileName
+                };
+
+                _log.Info($"File retrieved successfully: {fullFilePath}, ContentType: {contentType}");
+
+                return ServiceResult<FileStreamResult>.Success(
+                    result,
+                    "Info",
+                    "File retrieved successfully",
+                    200
+                );
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _log.Error($"Unauthorized access to file: {ex.Message}", ex);
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<FileStreamResult>.Failure(
+                    alert.Type,
+                    "Access denied to the requested file",
+                    403
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<FileStreamResult>.Failure(
+                    alert.Type,
+                    "Failed to retrieve file",
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<FileBase64Result> GetFileAsBase64(string filePath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(filePath))
+                {
+                    _log.Warn("File path is null or empty");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    return ServiceResult<FileBase64Result>.Failure(
+                        alert.Type,
+                        "File path is required",
+                        400
+                    );
+                }
+
+                // Security: Prevent path traversal attacks
+                if (filePath.Contains("..") || filePath.Contains("~"))
+                {
+                    _log.Warn($"Potential path traversal attack detected: {filePath}");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    return ServiceResult<FileBase64Result>.Failure(
+                        alert.Type,
+                        "Invalid file path",
+                        400
+                    );
+                }
+
+                string baseDmsPath = _configuration.GetValue<string>("DMS:RootPath") ?? "D:\\DMS";
+
+                string fullFilePath;
+                if (Path.IsPathRooted(filePath))
+                {
+                    fullFilePath = filePath.Replace("/", "\\");
+                }
+                else
+                {
+                    fullFilePath = Path.Combine(baseDmsPath, filePath.Replace("/", "\\"));
+                }
+
+                if (!File.Exists(fullFilePath))
+                {
+                    _log.Warn($"File not found: {fullFilePath}");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    return ServiceResult<FileBase64Result>.Failure(
+                        alert.Type,
+                        "File not found",
+                        404
+                    );
+                }
+
+                // Read file as bytes
+                byte[] fileBytes = File.ReadAllBytes(fullFilePath);
+                string base64String = Convert.ToBase64String(fileBytes);
+
+                // Get file info
+                string fileExtension = Path.GetExtension(fullFilePath).ToLower();
+                string contentType = GetContentType(fileExtension);
+                string fileName = Path.GetFileName(fullFilePath);
+                FileInfo fileInfo = new FileInfo(fullFilePath);
+
+                var result = new FileBase64Result
+                {
+                    FileName = fileName,
+                    FileExtension = fileExtension,
+                    ContentType = contentType,
+                    FileSize = fileInfo.Length,
+                    FileSizeMB = Math.Round(fileInfo.Length / (1024.0 * 1024.0), 2),
+                    Base64Data = $"data:{contentType};base64,{base64String}",
+                    CreatedDate = fileInfo.CreationTime,
+                    LastModified = fileInfo.LastWriteTime
+                };
+
+                _log.Info($"File retrieved as base64: {fullFilePath}");
+
+                return ServiceResult<FileBase64Result>.Success(
+                    result,
+                    "Info",
+                    "File retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<FileBase64Result>.Failure(
+                    alert.Type,
+                    "Failed to retrieve file",
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<FileExistsResult> CheckFileExists(string filePath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(filePath))
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    return ServiceResult<FileExistsResult>.Failure(
+                        alert.Type,
+                        "File path is required",
+                        400
+                    );
+                }
+
+                // Security check
+                if (filePath.Contains("..") || filePath.Contains("~"))
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    return ServiceResult<FileExistsResult>.Failure(
+                        alert.Type,
+                        "Invalid file path",
+                        400
+                    );
+                }
+
+                string baseDmsPath = _configuration.GetValue<string>("DMS:RootPath") ?? "D:\\DMS";
+
+                string fullFilePath;
+                if (Path.IsPathRooted(filePath))
+                {
+                    fullFilePath = filePath.Replace("/", "\\");
+                }
+                else
+                {
+                    fullFilePath = Path.Combine(baseDmsPath, filePath.Replace("/", "\\"));
+                }
+
+                bool exists = File.Exists(fullFilePath);
+
+                var result = new FileExistsResult
+                {
+                    Exists = exists,
+                    FilePath = filePath
+                };
+
+                return ServiceResult<FileExistsResult>.Success(
+                    result,
+                    "Info",
+                    exists ? "File exists" : "File not found",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<FileExistsResult>.Failure(
+                    alert.Type,
+                    "Error checking file existence",
+                    500
+                );
+            }
+        }
+
+        /// <summary>
+        /// Get content type based on file extension
+        /// </summary>
+        private string GetContentType(string fileExtension)
+        {
+            return fileExtension.ToLower() switch
+            {
+                // Images
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".gif" => "image/gif",
+                ".bmp" => "image/bmp",
+                ".webp" => "image/webp",
+                ".svg" => "image/svg+xml",
+                ".ico" => "image/x-icon",
+                ".tiff" or ".tif" => "image/tiff",
+
+                // Documents
+                ".pdf" => "application/pdf",
+                ".doc" => "application/msword",
+                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ".xls" => "application/vnd.ms-excel",
+                ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ".ppt" => "application/vnd.ms-powerpoint",
+                ".pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                ".txt" => "text/plain",
+                ".csv" => "text/csv",
+                ".xml" => "application/xml",
+                ".json" => "application/json",
+
+                // Archives
+                ".zip" => "application/zip",
+                ".rar" => "application/x-rar-compressed",
+                ".7z" => "application/x-7z-compressed",
+
+                // Default
+                _ => "application/octet-stream"
+            };
         }
     }
 }

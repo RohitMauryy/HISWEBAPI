@@ -79,4 +79,29 @@ namespace HISWEBAPI.DTO
      
         public int? IsActive { get; set; }
     }
+
+    public class FileStreamResult
+    {
+        public FileStream FileStream { get; set; }
+        public string ContentType { get; set; }
+        public string FileName { get; set; }
+    }
+
+    public class FileBase64Result
+    {
+        public string FileName { get; set; }
+        public string FileExtension { get; set; }
+        public string ContentType { get; set; }
+        public long FileSize { get; set; }
+        public double FileSizeMB { get; set; }
+        public string Base64Data { get; set; }
+        public DateTime CreatedDate { get; set; }
+        public DateTime LastModified { get; set; }
+    }
+
+    public class FileExistsResult
+    {
+        public bool Exists { get; set; }
+        public string FilePath { get; set; }
+    }
 }

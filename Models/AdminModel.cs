@@ -16,8 +16,7 @@
 
  public class PickListModel
     {
-        public required int id { get; set; }
-        public required string fieldName { get; set; }
+       
         public required string value { get; set; }
         public required string key { get; set; }
     }
@@ -210,5 +209,66 @@
         public int DefaultCorporateId { get; set; }
     }
 
+    public class HeaderMasterModel
+    {
+        public int HeaderId { get; set; }
+        public string HeaderBody { get; set; }
+        public int IsActive { get; set; }
+   
+    }
+
+    public class SequenceTypeMasterModel
+    {
+        public int TypeId { get; set; }
+        public string TypeName { get; set; }
+    }
+
+    public class SequenceMasterModel
+    {
+        public int SequenceId { get; set; }
+        public string Name { get; set; }
+        public int TypeId { get; set; }
+        public string TypeName { get; set; }
+        public string Prefix { get; set; }
+        public string FirstSeprator { get; set; }
+        public int FYFormatId { get; set; }
+        public string FYFormat { get; set; }
+        public string SecondSeprator { get; set; }
+        public int Length { get; set; }
+        public string Preview { get; set; }
+    }
+
+    public class BranchSequenceMappingModel
+    {
+        public int MappingId { get; set; }
+        public int BranchId { get; set; }
+        public string BranchName { get; set; }
+        public int RoleId { get; set; }
+        public string RoleName { get; set; }
+        public int TypeId { get; set; }
+        public string TypeName { get; set; }
+        public int SequenceId { get; set; }
+        public string SequencePreview { get; set; }
+        public string CreatedBy { get; set; }
+        public string CreatedOn { get; set; }
+        public string LastModifiedBy { get; set; }
+        public string LastModifiedOn { get; set; }
+    }
+
+    public class LabReportLetterHeadMaster
+    {
+        public int Id { get; set; }
+        public int BranchId { get; set; }
+        public string BranchName { get; set; }
+        public int TypeId { get; set; }
+        public string TypeName { get; set; }
+        public int PaddingLeft { get; set; }
+        public int PaddingRight { get; set; }
+        public int PaddingTop { get; set; }
+        public int PaddingBottom { get; set; }
+        public string LetterHeadFilePath { get; set; }
+        public int IsActive { get; set; }
+
+    }
 
 }

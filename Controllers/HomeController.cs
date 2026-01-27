@@ -429,5 +429,110 @@ namespace HISWEBAPI.Controllers
             });
         }
 
+
+
+        [HttpGet("getFile")]
+        [Authorize] 
+        public IActionResult GetFile([FromQuery] string filePath)
+        {
+            _log.Info($"GetFile called. FilePath={filePath}");
+
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                _log.Warn("File path is null or empty");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "File path is required",
+                    errors = new { filePath = "File path cannot be empty" }
+                });
+            }
+
+            var serviceResult = _homeRepository.GetFile(filePath);
+
+            if (serviceResult.Result)
+            {
+                _log.Info($"File retrieved successfully: {serviceResult.Message}");
+                return File(
+                    serviceResult.Data.FileStream,
+                    serviceResult.Data.ContentType,
+                    serviceResult.Data.FileName
+                );
+            }
+            else
+            {
+                _log.Warn($"File retrieval failed: {serviceResult.Message}");
+                return StatusCode(serviceResult.StatusCode, new
+                {
+                    result = serviceResult.Result,
+                    messageType = serviceResult.MessageType,
+                    message = serviceResult.Message
+                });
+            }
+        }
+
+        [HttpGet("getFileAsBase64")]
+        [Authorize]
+        public IActionResult GetFileAsBase64([FromQuery] string filePath)
+        {
+            _log.Info($"GetFileAsBase64 called. FilePath={filePath}");
+
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                _log.Warn("File path is null or empty");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "File path is required"
+                });
+            }
+
+            var serviceResult = _homeRepository.GetFileAsBase64(filePath);
+
+            if (serviceResult.Result)
+                _log.Info($"File retrieved as base64 successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"File retrieval as base64 failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("fileExists")]
+        [Authorize]
+        public IActionResult FileExists([FromQuery] string filePath)
+        {
+            _log.Info($"FileExists called. FilePath={filePath}");
+
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "File path is required"
+                });
+            }
+
+            var serviceResult = _homeRepository.CheckFileExists(filePath);
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
     }
 }

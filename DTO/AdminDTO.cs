@@ -587,4 +587,169 @@ namespace HISWEBAPI.DTO
         [Required(ErrorMessage = "IsActive is required")]
         public int IsActive { get; set; }
     }
+
+    public class HeaderMasterRequest
+    {
+        public int HeaderId { get; set; } = 0;
+
+        [Required(ErrorMessage = "RoleId is required")]
+        public int RoleId { get; set; }
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "Type is required")]
+        [StringLength(256, ErrorMessage = "Type cannot exceed 256 characters")]
+        public string Type { get; set; }
+
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "IsHeader is required")]
+        public int IsHeader { get; set; }
+
+        public string HeaderBody { get; set; }
+
+        [Required(ErrorMessage = "IsActive is required")]
+        public int IsActive { get; set; }
+    }
+
+    public class HeaderMasterResponse
+    {
+        public int HeaderId { get; set; }
+    }
+
+    public class GetHeaderMasterRequest
+    {
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "RoleId is required")]
+        public int RoleId { get; set; }
+
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "IsHeader is required")]
+        public int IsHeader { get; set; }
+    }
+
+    public class CreateUpdateSequenceMasterRequest
+    {
+        [Required(ErrorMessage = "SequenceId is required")]
+        public int SequenceId { get; set; }
+
+        [Required(ErrorMessage = "Name is required")]
+        [StringLength(256, ErrorMessage = "Name cannot exceed 256 characters")]
+        public string Name { get; set; }
+
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "TypeName is required")]
+        [StringLength(100, ErrorMessage = "TypeName cannot exceed 100 characters")]
+        public string TypeName { get; set; }
+
+        // Prefix can be blank (empty string), not required
+        [StringLength(10, ErrorMessage = "Prefix cannot exceed 10 characters")]
+        public string Prefix { get; set; } = string.Empty;
+
+        // FirstSeprator can be blank (empty string), not required
+        [StringLength(2, ErrorMessage = "FirstSeprator cannot exceed 2 characters")]
+        public string FirstSeprator { get; set; } = string.Empty;
+
+        // FYFormatId can be 0 (no format selected), not required to be > 0
+        public int FYFormatId { get; set; } = 0;
+
+        // FYFormat can be blank (empty string), not required
+        [StringLength(20, ErrorMessage = "FYFormat cannot exceed 20 characters")]
+        public string FYFormat { get; set; } = string.Empty;
+
+        // SecondSeprator can be blank (empty string), not required
+        [StringLength(2, ErrorMessage = "SecondSeprator cannot exceed 2 characters")]
+        public string SecondSeprator { get; set; } = string.Empty;
+
+        // Length must be greater than 0
+        [Required(ErrorMessage = "Length is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Length must be greater than 0")]
+        public int Length { get; set; }
+
+        [Required(ErrorMessage = "Preview is required")]
+        [StringLength(50, ErrorMessage = "Preview cannot exceed 50 characters")]
+        public string Preview { get; set; }
+    }
+
+    public class CreateUpdateSequenceMasterResponse
+    {
+        public int SequenceId { get; set; }
+    }
+
+    public class CreateUpdateBranchSequenceMappingRequest
+    {
+        public int MappingId { get; set; } = 0;
+
+        [Required(ErrorMessage = "BranchId is required")]
+        [Range(0, int.MaxValue, ErrorMessage = "BranchId must be greater than or equal to 0")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "RoleId is required")]
+        [Range(0, int.MaxValue, ErrorMessage = "RoleId must be greater than or equal to 0")]
+        public int RoleId { get; set; }
+
+        [Required(ErrorMessage = "TypeId is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "TypeId must be greater than 0")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "SequenceId is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "SequenceId must be greater than 0")]
+        public int SequenceId { get; set; }
+    }
+
+    public class CreateUpdateBranchSequenceMappingResponse
+    {
+        public int MappingId { get; set; }
+    }
+
+    public class LabReportLetterHeadRequest
+    {
+        public int Id { get; set; } = 0;
+
+        [Required(ErrorMessage = "BranchId is required")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "TypeId is required")]
+        public int TypeId { get; set; }
+
+        [Required(ErrorMessage = "TypeName is required")]
+        [StringLength(100, ErrorMessage = "TypeName cannot exceed 100 characters")]
+        public string TypeName { get; set; }
+
+        [Range(0, 500, ErrorMessage = "PaddingLeft must be between 0 and 500")]
+        public int PaddingLeft { get; set; } = 0;
+
+        [Range(0, 500, ErrorMessage = "PaddingRight must be between 0 and 500")]
+        public int PaddingRight { get; set; } = 0;
+
+        [Range(0, 500, ErrorMessage = "PaddingTop must be between 0 and 500")]
+        public int PaddingTop { get; set; } = 0;
+
+        [Range(0, 500, ErrorMessage = "PaddingBottom must be between 0 and 500")]
+        public int PaddingBottom { get; set; } = 0;
+
+        public IFormFile LetterHeadFile { get; set; }
+
+      
+    }
+
+   
+    public class LabReportLetterHeadResponse
+    {
+        public int Id { get; set; }
+        public string LetterHeadFilePath { get; set; }
+    }
+    public class DeleteLetterHeadRequest
+    {
+        [Required(ErrorMessage = "Id is required")]
+        public int Id { get; set; }
+    }
 }

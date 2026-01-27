@@ -45,7 +45,16 @@ namespace HISWEBAPI.Repositories.Interfaces
         ServiceResult<int> CreateUpdateDistrictMaster(CreateUpdateDistrictMasterRequest request, AllGlobalValues globalValues);
         ServiceResult<int> CreateUpdateCityMaster(CreateUpdateCityMasterRequest request, AllGlobalValues globalValues);
         ServiceResult<int> CreateUpdatePincodeMaster(CreateUpdatePincodeMasterRequest request, AllGlobalValues globalValues);
-
+        ServiceResult<HeaderMasterResponse> CreateUpdateHeaderMaster(HeaderMasterRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<HeaderMasterModel>> GetHeaderMaster(int branchId, int roleId, int typeId, int isHeader);
+        ServiceResult<IEnumerable<SequenceTypeMasterModel>> GetSequenceTypeList();
+        ServiceResult<CreateUpdateSequenceMasterResponse> CreateUpdateSequenceMaster(CreateUpdateSequenceMasterRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<SequenceMasterModel>> GetSequenceMaster(int sequenceTypeId);
+        ServiceResult<CreateUpdateBranchSequenceMappingResponse> CreateUpdateBranchSequenceMapping(CreateUpdateBranchSequenceMappingRequest request,AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<BranchSequenceMappingModel>> GetBranchSequenceMapping();
+        ServiceResult<LabReportLetterHeadResponse> CreateUpdateLabReportLetterHead(LabReportLetterHeadRequest request,AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<LabReportLetterHeadMaster>> GetLabReportLetterHeadList();
+        ServiceResult<string> DeleteLetterHeadMaster(int id, AllGlobalValues globalValues);
 
 
     }

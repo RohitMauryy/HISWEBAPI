@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using HISWEBAPI.DTO;
 using HISWEBAPI.Models;
+using Microsoft.AspNetCore.Mvc;
 
 namespace HISWEBAPI.Repositories.Interfaces
 {
@@ -17,6 +18,9 @@ namespace HISWEBAPI.Repositories.Interfaces
         ServiceResult<IEnumerable<PincodeMasterModel>> GetPincodeMaster(int cityId, int? isActive);
         ServiceResult<IEnumerable<InsuranceCompanyModel>> GetAllInsuranceCompanyList();
         ServiceResult<IEnumerable<CorporateModel>> GetCorporateListByInsuranceCompanyId(int? insuranceCompanyId, int? isActive);
+        ServiceResult<DTO.FileStreamResult> GetFile(string filePath);
+        ServiceResult<FileBase64Result> GetFileAsBase64(string filePath);
+        ServiceResult<FileExistsResult> CheckFileExists(string filePath);
 
     }
 }

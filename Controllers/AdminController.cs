@@ -1773,5 +1773,459 @@ namespace HISWEBAPI.Controllers
                 data = new { pincodeId = serviceResult.Data }
             });
         }
+
+        [HttpPost("createUpdateHeaderMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateHeaderMaster([FromBody] HeaderMasterRequest request)
+        {
+            _log.Info($"CreateUpdateHeaderMaster called. HeaderId={request.HeaderId}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for header insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Validate IsHeader value
+            if (request.IsHeader != 0 && request.IsHeader != 1)
+            {
+                _log.Warn("Invalid IsHeader value provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsHeader must be 0 or 1",
+                    errors = new { isHeader = request.IsHeader }
+                });
+            }
+
+            // Validate IsActive value
+            if (request.IsActive != 0 && request.IsActive != 1)
+            {
+                _log.Warn("Invalid IsActive value provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 or 1",
+                    errors = new { isActive = request.IsActive }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdateHeaderMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Header operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"Header operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getHeaderMaster")]
+        [Authorize]
+        public IActionResult GetHeaderMaster(
+            [FromQuery] int branchId,
+            [FromQuery] int roleId,
+            [FromQuery] int typeId,
+            [FromQuery] int isHeader)
+        {
+            _log.Info($"GetHeaderMaster called. BranchId={branchId}, RoleId={roleId}, TypeId={typeId}, IsHeader={isHeader}");
+
+            if (branchId <= 0)
+            {
+                _log.Warn("Invalid BranchId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "BranchId must be greater than 0",
+                    errors = new { branchId }
+                });
+            }
+
+            if (roleId < 0)
+            {
+                _log.Warn("Invalid RoleId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "RoleId must be greater than Equal to 0",
+                    errors = new { roleId }
+                });
+            }
+
+            if (typeId <= 0)
+            {
+                _log.Warn("Invalid TypeId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "TypeId must be greater than 0",
+                    errors = new { typeId }
+                });
+            }
+
+            if (isHeader != 0 && isHeader != 1)
+            {
+                _log.Warn("Invalid IsHeader value provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsHeader must be 0 or 1",
+                    errors = new { isHeader }
+                });
+            }
+
+            var serviceResult = _adminRepository.GetHeaderMaster(branchId, roleId, typeId, isHeader);
+
+            if (serviceResult.Result)
+                _log.Info($"Headers fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No headers found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+       
+
+        [HttpGet("getSequenceTypeList")]
+        [Authorize]
+        public IActionResult GetSequenceTypeList()
+        {
+            _log.Info("GetSequenceTypeList called.");
+
+            var serviceResult = _adminRepository.GetSequenceTypeList();
+
+            if (serviceResult.Result)
+                _log.Info($"Sequence types fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"No sequence types found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpPost("createUpdateSequenceMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateSequenceMaster([FromBody] CreateUpdateSequenceMasterRequest request)
+        {
+            _log.Info($"CreateUpdateSequenceMaster called. SequenceId={request.SequenceId}, Name={request.Name}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for sequence master insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Validate TypeId (must be greater than 0)
+            if (request.TypeId <= 0)
+            {
+                _log.Warn("Invalid TypeId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "TypeId must be greater than 0",
+                    errors = new { typeId = request.TypeId }
+                });
+            }
+
+            // Length validation is handled by [Range] attribute in the DTO
+            // No need for additional validation here since ModelState will catch it
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdateSequenceMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Sequence master operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"Sequence master operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getSequenceMaster")]
+        [Authorize]
+        public IActionResult GetSequenceMaster([FromQuery] int sequenceTypeId)
+        {
+            _log.Info($"GetSequenceMaster called. SequenceTypeId={sequenceTypeId}");
+
+            // Validate sequenceTypeId
+            if (sequenceTypeId <= 0)
+            {
+                _log.Warn("Invalid SequenceTypeId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "SequenceTypeId must be greater than 0",
+                    errors = new { sequenceTypeId }
+                });
+            }
+
+            var serviceResult = _adminRepository.GetSequenceMaster(sequenceTypeId);
+
+            if (serviceResult.Result)
+                _log.Info($"Sequences fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No sequences found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+      
+
+        [HttpPost("createUpdateBranchSequenceMapping")]
+        [Authorize]
+        public IActionResult CreateUpdateBranchSequenceMapping([FromBody] CreateUpdateBranchSequenceMappingRequest request)
+        {
+            _log.Info($"CreateUpdateBranchSequenceMapping called. MappingId={request.MappingId}, BranchId={request.BranchId}, RoleId={request.RoleId}, TypeId={request.TypeId}, SequenceId={request.SequenceId}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for branch sequence mapping insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdateBranchSequenceMapping(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Branch sequence mapping operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"Branch sequence mapping operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getBranchSequenceMapping")]
+        [Authorize]
+        public IActionResult GetBranchSequenceMapping()
+        {
+            _log.Info("GetBranchSequenceMapping called.");
+
+            var serviceResult = _adminRepository.GetBranchSequenceMapping();
+
+            if (serviceResult.Result)
+                _log.Info($"Branch sequence mappings fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No branch sequence mappings found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+
+
+        [HttpPost("createUpdateLabReportLetterHead")]
+        [Authorize]
+        public IActionResult CreateUpdateLabReportLetterHead([FromForm] LabReportLetterHeadRequest request)
+        {
+            _log.Info($"CreateUpdateLabReportLetterHead called. Id={request.Id}, BranchId={request.BranchId}, TypeId={request.TypeId}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for lab report letter head insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Validate BranchId
+            if (request.BranchId < 0)
+            {
+                _log.Warn("Invalid BranchId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "BranchId must be greater than 0",
+                    errors = new { branchId = request.BranchId }
+                });
+            }
+
+            // Validate TypeId
+            if (request.TypeId < 0)
+            {
+                _log.Warn("Invalid TypeId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "TypeId must be greater than 0",
+                    errors = new { typeId = request.TypeId }
+                });
+            }
+
+            // Validate file upload for new records (Id = 0)
+            if (request.Id == 0 && (request.LetterHeadFile == null || request.LetterHeadFile.Length == 0))
+            {
+                _log.Warn("Letter head file is required for new records.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "Letter head file is required for new letter head configuration",
+                    errors = new { letterHeadFile = "Required" }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdateLabReportLetterHead(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Lab report letter head operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"Lab report letter head operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getLabReportLetterHeadList")]
+        [Authorize]
+        public IActionResult GetLabReportLetterHeadList()
+        {
+            _log.Info("GetLabReportLetterHeadList called.");
+
+            var serviceResult = _adminRepository.GetLabReportLetterHeadList();
+
+            if (serviceResult.Result)
+                _log.Info($"Lab report letter heads fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No lab report letter heads found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpPatch("deleteLetterHeadMaster")]
+        [Authorize]
+        public IActionResult DeleteLetterHeadMaster([FromQuery] int id)
+        {
+            _log.Info($"DeleteLetterHeadMaster API called. Id={id}");
+
+            if (id <= 0)
+            {
+                _log.Warn("Invalid Id provided for letter head deletion.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "Id must be greater than 0",
+                    errors = new { id }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.DeleteLetterHeadMaster(id, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Letter head deleted successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"Letter head deletion failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
     }
 }

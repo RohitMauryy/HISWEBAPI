@@ -15,6 +15,8 @@ using Microsoft.Data.SqlClient;
 using HISWEBAPI.Utilities;
 using Microsoft.Extensions.Caching.Distributed;
 using StackExchange.Redis;
+using System.Configuration;
+using HISWEBAPI.Configuration;
 
 namespace HISWEBAPI.Repositories.Implementations
 {
@@ -24,15 +26,19 @@ namespace HISWEBAPI.Repositories.Implementations
         private readonly IResponseMessageService _messageService;
         private readonly IDistributedCache _distributedCache;
         private static readonly ILog _log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        private readonly IConfiguration _configuration;
+
 
         public AdminRepository(
             ICustomSqlHelper sqlHelper,
             IResponseMessageService messageService,
-            IDistributedCache distributedCache)
+            IDistributedCache distributedCache,
+            IConfiguration configuration)
         {
             _sqlHelper = sqlHelper;
             _messageService = messageService;
             _distributedCache = distributedCache;
+            _configuration = configuration;
 
         }
 
@@ -854,7 +860,7 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-       
+
         public ServiceResult<string> UpdateUserGroupStatus(int id, int isActive, AllGlobalValues globalValues)
         {
             try
@@ -869,14 +875,14 @@ namespace HISWEBAPI.Repositories.Implementations
 
                 _distributedCache.Remove("_UserGroupMaster_All");
 
-                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
-                    return ServiceResult<string>.Success(
-                        "Group status updated successfully",
-                        alert.Type,
-                        alert.Message,
-                        200
-                    );
-              
+                var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
+                return ServiceResult<string>.Success(
+                    "Group status updated successfully",
+                    alert.Type,
+                    alert.Message,
+                    200
+                );
+
             }
             catch (Exception ex)
             {
@@ -1890,7 +1896,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     CommandType.StoredProcedure,
                     new
                     {
-                       
+
                     }
                 );
 
@@ -1971,12 +1977,17 @@ namespace HISWEBAPI.Repositories.Implementations
                 // Generate cache key for this specific mapping
                 string cacheKey = $"_RoleWiseMenuMapping_{1}_{request.RoleId}";
 
+                _distributedCache.Remove(cacheKey);
+
+                GlobalFunctions.ClearCacheByPattern(_configuration, "_RoleWiseMenuMapping_*");
+                GlobalFunctions.ClearCacheByPattern(_configuration, "_UserWiseMenuMapping_*");
+
+                _log.Info($"Cleared cache for key: {cacheKey}");
+
                 // If MenuMappings list is empty or null, only delete operation was needed
                 if (request.MenuMappings == null || !request.MenuMappings.Any())
                 {
-                    // Clear cache after delete
-                    _distributedCache.Remove(cacheKey);
-                    _log.Info($"Cleared cache for key: {cacheKey}");
+
 
                     var alert = _messageService.GetMessageAndTypeByAlertCode(
                         request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
@@ -1996,9 +2007,7 @@ namespace HISWEBAPI.Repositories.Implementations
 
                 if (!validMenuMappings.Any())
                 {
-                    // Clear cache
-                    _distributedCache.Remove(cacheKey);
-                    _log.Info($"Cleared cache for key: {cacheKey}");
+
 
                     var alert = _messageService.GetMessageAndTypeByAlertCode(
                         request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
@@ -2054,9 +2063,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     }
                 }
 
-                // Clear cache after successful operation
-                _distributedCache.Remove(cacheKey);
-                _log.Info($"Cleared cache for key: {cacheKey}");
+
 
                 _log.Info($"Inserted {insertedCount} role-wise menu mappings for RoleId={request.RoleId}");
 
@@ -2207,7 +2214,7 @@ namespace HISWEBAPI.Repositories.Implementations
                 // If UserMenus list is empty or null, only delete operation was needed
                 if (request.UserMenus == null || !request.UserMenus.Any())
                 {
-                    
+
 
                     var alert = _messageService.GetMessageAndTypeByAlertCode(
                         request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
@@ -2227,7 +2234,7 @@ namespace HISWEBAPI.Repositories.Implementations
 
                 if (!validUserMenus.Any())
                 {
-                  
+
 
                     var alert = _messageService.GetMessageAndTypeByAlertCode(
                         request.IsFirst == 1 ? "DATA_DELETED_SUCCESSFULLY" : "DATA_SAVED_SUCCESSFULLY"
@@ -2287,7 +2294,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     }
                 }
 
-              
+
 
                 _log.Info($"Inserted {insertedCount} user menu records for UserId={request.UserId}");
 
@@ -3304,7 +3311,7 @@ namespace HISWEBAPI.Repositories.Implementations
                     );
                 }
 
-              
+
 
                 if (result > 0)
                 {
@@ -3343,7 +3350,7 @@ namespace HISWEBAPI.Repositories.Implementations
         }
 
 
-      
+
         public ServiceResult<int> CreateUpdatePincodeMaster(CreateUpdatePincodeMasterRequest request, AllGlobalValues globalValues)
         {
             try
@@ -3500,6 +3507,902 @@ namespace HISWEBAPI.Repositories.Implementations
             catch (Exception ex)
             {
                 _log.Error($"Error clearing CityMaster cache: {ex.Message}");
+            }
+        }
+
+        public ServiceResult<HeaderMasterResponse> CreateUpdateHeaderMaster(HeaderMasterRequest request, AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdateHeaderMaster called. HeaderId={request.HeaderId}, RoleId={request.RoleId}, BranchId={request.BranchId}");
+
+                var result = _sqlHelper.DML("IU_HeaderMaster", CommandType.StoredProcedure, new
+                {
+                    @hospId = globalValues.hospId,
+                    @headerId = request.HeaderId,
+                    @roleId = request.RoleId,
+                    @branchId = request.BranchId,
+                    @type = request.Type,
+                    @typeId = request.TypeId,
+                    @isHeader = request.IsHeader,
+                    @headerBody = request.HeaderBody ?? (object)DBNull.Value,
+                    @isActive = request.IsActive,
+                    @userId = globalValues.userId,
+                    @IpAddress = globalValues.ipAddress
+                },
+                new
+                {
+                    result = 0
+                });
+
+                // Clear cache after successful operation
+                string cacheKey = $"_HeaderMaster_{request.BranchId}_{request.RoleId}_{request.TypeId}_{request.HeaderId}";
+                _distributedCache.Remove(cacheKey);
+                _log.Info($"Cleared HeaderMaster cache for key: {cacheKey}");
+
+                if (result < 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("OPERATION_FAILED");
+                    _log.Error($"HeaderMaster operation failed. Result={result}");
+                    return ServiceResult<HeaderMasterResponse>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        500
+                    );
+                }
+
+                var responseData = new HeaderMasterResponse { HeaderId = result };
+
+                if (request.HeaderId == 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
+                    _log.Info($"Header created successfully. HeaderId={result}");
+                    return ServiceResult<HeaderMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        "Header saved successfully",
+                        201
+                    );
+                }
+                else
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
+                    _log.Info($"Header updated successfully. HeaderId={result}");
+                    return ServiceResult<HeaderMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        "Header updated successfully",
+                        200
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<HeaderMasterResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<HeaderMasterModel>> GetHeaderMaster(int branchId, int roleId, int typeId, int isHeader)
+        {
+            try
+            {
+                _log.Info($"GetHeaderMaster called. BranchId={branchId}, RoleId={roleId}, TypeId={typeId}, IsHeader={isHeader}");
+
+                // Generate dynamic cache key based on parameters
+                string cacheKey = $"_HeaderMaster_{branchId}_{roleId}_{typeId}_{isHeader}";
+
+                // Try to get data from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<HeaderMasterModel> headers;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"HeaderMaster data retrieved from cache. Key={cacheKey}");
+                    headers = System.Text.Json.JsonSerializer.Deserialize<List<HeaderMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"HeaderMaster cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetHeaderMaster",
+                        CommandType.StoredProcedure,
+                        new
+                        {
+                            @branchId = branchId,
+                            @roleId = roleId,
+                            @typeId = typeId,
+                            @isHeader = isHeader
+                        }
+                    );
+
+                    headers = dataTable?.AsEnumerable().Select(row => new HeaderMasterModel
+                    {
+                        HeaderId = row.Field<int>("HeaderId"),
+                        HeaderBody = row.Field<string>("HeaderBody") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive")
+                    }).ToList() ?? new List<HeaderMasterModel>();
+
+                    // Store data in cache with no expiration
+                    if (headers.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(headers);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"HeaderMaster data cached permanently. Key={cacheKey}, Count={headers.Count}");
+                    }
+                }
+
+                if (!headers.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No headers found for BranchId={branchId}, RoleId={roleId}, TypeId={typeId}, IsHeader={isHeader}");
+                    return ServiceResult<IEnumerable<HeaderMasterModel>>.Failure(
+                        alert.Type,
+                        "No headers found",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {headers.Count} header(s) from cache");
+
+                return ServiceResult<IEnumerable<HeaderMasterModel>>.Success(
+                    headers,
+                    "Info",
+                    $"{headers.Count} header(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<HeaderMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
+        // Repositories/Implementations/AdminRepository.cs
+        // Add these methods to the existing AdminRepository class
+
+        public ServiceResult<IEnumerable<SequenceTypeMasterModel>> GetSequenceTypeList()
+        {
+            try
+            {
+                _log.Info("GetSequenceTypeList called.");
+
+                // Define cache key
+                string cacheKey = "_SequenceTypeMaster_All";
+
+                // Try to get data from Redis cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<SequenceTypeMasterModel> sequenceTypes;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"SequenceTypeMaster data retrieved from cache. Key={cacheKey}");
+                    sequenceTypes = System.Text.Json.JsonSerializer.Deserialize<List<SequenceTypeMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"SequenceTypeMaster cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetSequenceTypeList",
+                        CommandType.StoredProcedure
+                    );
+
+                    sequenceTypes = dataTable?.AsEnumerable().Select(row => new SequenceTypeMasterModel
+                    {
+                        TypeId = row.Field<int>("TypeId"),
+                        TypeName = row.Field<string>("TypeName") ?? string.Empty
+                    }).ToList() ?? new List<SequenceTypeMasterModel>();
+
+                    // Store data in Redis cache (permanent until manually cleared)
+                    if (sequenceTypes.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(sequenceTypes);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"SequenceTypeMaster data cached permanently. Key={cacheKey}, Count={sequenceTypes.Count}");
+                    }
+                }
+
+                if (!sequenceTypes.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info("No sequence types found");
+
+                    return ServiceResult<IEnumerable<SequenceTypeMasterModel>>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {sequenceTypes.Count} sequence type(s) from cache");
+
+                return ServiceResult<IEnumerable<SequenceTypeMasterModel>>.Success(
+                    sequenceTypes,
+                    "Info",
+                    $"{sequenceTypes.Count} sequence type(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<SequenceTypeMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<CreateUpdateSequenceMasterResponse> CreateUpdateSequenceMaster(
+     CreateUpdateSequenceMasterRequest request,
+     AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdateSequenceMaster called. SequenceId={request.SequenceId}, Name={request.Name}");
+
+                var result = _sqlHelper.ExecuteScalar(
+                    "IU_SequenceMaster",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        hospId = globalValues.hospId,
+                        sequenceId = request.SequenceId,
+                        name = request.Name,
+                        typeId = request.TypeId,
+                        typeName = request.TypeName,
+                        prefix = request.Prefix ?? string.Empty,
+                        firstSeprator = request.FirstSeprator ?? string.Empty,
+                        fYFormatId = request.FYFormatId,
+                        fYFormat = request.FYFormat ?? string.Empty,
+                        secondSeprator = request.SecondSeprator ?? string.Empty,
+                        length = request.Length,
+                        preview = request.Preview,
+                        userId = globalValues.userId,
+                        IpAddress = globalValues.ipAddress
+                    }
+                );
+
+                int resultValue = Convert.ToInt32(result);
+
+                // Clear cache for this sequence type
+                string cacheKey = $"_SequenceMaster_Type{request.TypeId}";
+                _distributedCache.Remove(cacheKey);
+                _log.Info($"Cleared SequenceMaster cache for SequenceTypeId={request.TypeId}");
+                if (resultValue == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Sequence Name already exists: {request.Name}");
+                    return ServiceResult<CreateUpdateSequenceMasterResponse>.Failure(
+                        alert.Type,
+                        "Sequence Name Already Exists",
+                        409
+                    );
+                }
+
+                if (resultValue == -2)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Sequence Format already exists: {request.Preview}");
+                    return ServiceResult<CreateUpdateSequenceMasterResponse>.Failure(
+                        alert.Type,
+                        "Sequence Format Already Exists",
+                        409
+                    );
+                }
+
+                if (resultValue > 0)
+                {
+                    var responseData = new CreateUpdateSequenceMasterResponse { SequenceId = resultValue };
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.SequenceId == 0 ? "DATA_SAVED_SUCCESSFULLY" : "DATA_UPDATED_SUCCESSFULLY"
+                    );
+
+                    _log.Info($"Sequence Master {(request.SequenceId == 0 ? "created" : "updated")} successfully. SequenceId={resultValue}");
+
+                    return ServiceResult<CreateUpdateSequenceMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        request.SequenceId == 0 ? 201 : 200
+                    );
+                }
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_FAILED");
+                _log.Error($"Sequence Master operation failed with result: {resultValue}");
+                return ServiceResult<CreateUpdateSequenceMasterResponse>.Failure(
+                    alert1.Type,
+                    alert1.Message,
+                    500
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<CreateUpdateSequenceMasterResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+        public ServiceResult<IEnumerable<SequenceMasterModel>> GetSequenceMaster(int sequenceTypeId)
+        {
+            try
+            {
+                _log.Info($"GetSequenceMaster called. SequenceTypeId={sequenceTypeId}");
+
+                // Validate sequenceTypeId
+                if (sequenceTypeId <= 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    _log.Warn($"Invalid SequenceTypeId: {sequenceTypeId}");
+                    return ServiceResult<IEnumerable<SequenceMasterModel>>.Failure(
+                        alert.Type,
+                        "SequenceTypeId must be greater than 0",
+                        400
+                    );
+                }
+
+                // Generate dynamic cache key based on sequenceTypeId
+                string cacheKey = $"_SequenceMaster_Type{sequenceTypeId}";
+
+                // Try to get data from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<SequenceMasterModel> sequences;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"SequenceMaster data retrieved from cache. Key={cacheKey}");
+                    sequences = System.Text.Json.JsonSerializer.Deserialize<List<SequenceMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"SequenceMaster cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetSequenceMaster",
+                        CommandType.StoredProcedure,
+                        new { sequenceTypeId = sequenceTypeId }
+                    );
+
+                    sequences = dataTable?.AsEnumerable().Select(row => new SequenceMasterModel
+                    {
+                        SequenceId = row.Field<int>("SequenceId"),
+                        Name = row.Field<string>("Name") ?? string.Empty,
+                        TypeId = row.Field<int>("TypeId"),
+                        TypeName = row.Field<string>("TypeName") ?? string.Empty,
+                        Prefix = row.Field<string>("Prefix") ?? string.Empty,
+                        FirstSeprator = row.Field<string>("FirstSeprator") ?? string.Empty,
+                        FYFormatId = row.Field<int>("FYFormatId"),
+                        FYFormat = row.Field<string>("FYFormat") ?? string.Empty,
+                        SecondSeprator = row.Field<string>("SecondSeprator") ?? string.Empty,
+                        Length = row.Field<int>("Length"),
+                        Preview = row.Field<string>("Preview") ?? string.Empty
+                    }).ToList() ?? new List<SequenceMasterModel>();
+
+                    // Store data in cache (permanent until manually cleared)
+                    if (sequences.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(sequences);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"SequenceMaster data cached permanently. Key={cacheKey}, Count={sequences.Count}");
+                    }
+                }
+
+                if (!sequences.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No sequences found for SequenceTypeId={sequenceTypeId}");
+                    return ServiceResult<IEnumerable<SequenceMasterModel>>.Failure(
+                        alert.Type,
+                        $"No sequences found for SequenceTypeId: {sequenceTypeId}",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {sequences.Count} sequence(s) from cache");
+
+                return ServiceResult<IEnumerable<SequenceMasterModel>>.Success(
+                    sequences,
+                    "Info",
+                    $"{sequences.Count} sequence(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<SequenceMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
+
+        public ServiceResult<CreateUpdateBranchSequenceMappingResponse> CreateUpdateBranchSequenceMapping(
+            CreateUpdateBranchSequenceMappingRequest request,
+            AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdateBranchSequenceMapping called. MappingId={request.MappingId}, BranchId={request.BranchId}, RoleId={request.RoleId}, TypeId={request.TypeId}, SequenceId={request.SequenceId}");
+
+                var dataTable = _sqlHelper.GetDataTable(
+                    "IU_BranchSequenceMapping",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        mappingId = request.MappingId,
+                        branchId = request.BranchId,
+                        roleId = request.RoleId,
+                        typeId = request.TypeId,
+                        sequenceId = request.SequenceId,
+                        userId = globalValues.userId,
+                        ipAddress = globalValues.ipAddress
+                    }
+                );
+
+                if (dataTable == null || dataTable.Rows.Count == 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                    _log.Error("No result returned from stored procedure");
+                    return ServiceResult<CreateUpdateBranchSequenceMappingResponse>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        500
+                    );
+                }
+
+                int result = Convert.ToInt32(dataTable.Rows[0]["Result"]);
+
+                // Clear cache after successful operation
+                string cacheKey = "_BranchSequenceMapping_All";
+                _distributedCache.Remove(cacheKey);
+                _log.Info($"Cleared BranchSequenceMapping cache. Key={cacheKey}");
+
+                if (result == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Branch sequence mapping already exists for BranchId={request.BranchId}, RoleId={request.RoleId}, TypeId={request.TypeId}");
+                    return ServiceResult<CreateUpdateBranchSequenceMappingResponse>.Failure(
+                        alert.Type,
+                        "Mapping already exists for this Branch, Role, and Type combination",
+                        409
+                    );
+                }
+
+                if (result > 0)
+                {
+                    var responseData = new CreateUpdateBranchSequenceMappingResponse { MappingId = result };
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.MappingId == 0 ? "DATA_SAVED_SUCCESSFULLY" : "DATA_UPDATED_SUCCESSFULLY"
+                    );
+
+                    _log.Info($"Branch sequence mapping {(request.MappingId == 0 ? "created" : "updated")} successfully. MappingId={result}");
+
+                    return ServiceResult<CreateUpdateBranchSequenceMappingResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        request.MappingId == 0 ? 201 : 200
+                    );
+                }
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_FAILED");
+                _log.Error($"Branch sequence mapping operation failed with result: {result}");
+                return ServiceResult<CreateUpdateBranchSequenceMappingResponse>.Failure(
+                    alert1.Type,
+                    alert1.Message,
+                    500
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<CreateUpdateBranchSequenceMappingResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<BranchSequenceMappingModel>> GetBranchSequenceMapping()
+        {
+            try
+            {
+                _log.Info("GetBranchSequenceMapping called.");
+
+                // Define cache key
+                string cacheKey = "_BranchSequenceMapping_All";
+
+                // Try to get data from Redis cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<BranchSequenceMappingModel> mappings;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"BranchSequenceMapping data retrieved from cache. Key={cacheKey}");
+                    mappings = System.Text.Json.JsonSerializer.Deserialize<List<BranchSequenceMappingModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"BranchSequenceMapping cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetBranchSequenceMapping",
+                        CommandType.StoredProcedure
+                    );
+
+                    mappings = dataTable?.AsEnumerable().Select(row => new BranchSequenceMappingModel
+                    {
+                        MappingId = row.Field<int>("MappingId"),
+                        BranchId = row.Field<int>("BranchId"),
+                        BranchName = row.Field<string>("BranchName") ?? string.Empty,
+                        RoleId = row.Field<int>("RoleId"),
+                        RoleName = row.Field<string>("RoleName") ?? string.Empty,
+                        TypeId = row.Field<int>("TypeId"),
+                        TypeName = row.Field<string>("TypeName") ?? string.Empty,
+                        SequenceId = row.Field<int>("SequenceId"),
+                        SequencePreview = row.Field<string>("SequencePreview") ?? string.Empty,
+                        CreatedBy = row.Field<string>("CreatedBy") ?? string.Empty,
+                        CreatedOn = row.Field<string>("CreatedOn") ?? string.Empty,
+                        LastModifiedBy = row.Field<string>("LastModifiedBy") ?? string.Empty,
+                        LastModifiedOn = row.Field<string>("LastModifiedOn") ?? string.Empty
+                    }).ToList() ?? new List<BranchSequenceMappingModel>();
+
+                    // Store data in Redis cache (permanent until manually cleared)
+                    if (mappings.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(mappings);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"BranchSequenceMapping data cached permanently. Key={cacheKey}, Count={mappings.Count}");
+                    }
+                }
+
+                if (!mappings.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info("No branch sequence mappings found");
+
+                    return ServiceResult<IEnumerable<BranchSequenceMappingModel>>.Failure(
+                        alert.Type,
+                        alert.Message,
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {mappings.Count} branch sequence mapping(s) from cache");
+
+                return ServiceResult<IEnumerable<BranchSequenceMappingModel>>.Success(
+                    mappings,
+                    "Info",
+                    $"{mappings.Count} branch sequence mapping(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<BranchSequenceMappingModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
+        public ServiceResult<LabReportLetterHeadResponse> CreateUpdateLabReportLetterHead(
+     LabReportLetterHeadRequest request,
+     AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdateLabReportLetterHead called. Id={request.Id}, BranchId={request.BranchId}, TypeId={request.TypeId}");
+
+                string letterHeadFilePath = null;
+                string signatureFilePath = null;
+
+                var fileUploadHelper = new Utilities.FileUploadHelper(_configuration);
+
+                // Handle letter head file upload if provided
+                if (request.LetterHeadFile != null && request.LetterHeadFile.Length > 0)
+                {
+                    _log.Info($"Processing letter head file: {request.LetterHeadFile.FileName}, Size: {request.LetterHeadFile.Length} bytes");
+
+                    // Upload file to DMS
+                    var (uploadSuccess, filePath, uploadError) = fileUploadHelper.UploadFile(
+                        request.LetterHeadFile,
+                        "LetterHeadImages"
+                    );
+
+                    if (!uploadSuccess)
+                    {
+                        _log.Error($"Letter head file upload failed: {uploadError}");
+                        var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                        return ServiceResult<LabReportLetterHeadResponse>.Failure(
+                            alert.Type,
+                            $"Letter head file upload failed: {uploadError}",
+                            500
+                        );
+                    }
+
+                    letterHeadFilePath = filePath;
+                    _log.Info($"Letter head file uploaded successfully: {letterHeadFilePath}");
+                }
+
+
+
+                // Execute stored procedure
+                SqlParameter[] parameters = new SqlParameter[]
+                {
+            new SqlParameter("@Id", request.Id),
+            new SqlParameter("@branchId", request.BranchId),
+            new SqlParameter("@TypeId", request.TypeId),
+            new SqlParameter("@TypeName", request.TypeName ?? (object)DBNull.Value),
+            new SqlParameter("@paddingLeft", request.PaddingLeft),
+            new SqlParameter("@paddingRight", request.PaddingRight),
+            new SqlParameter("@paddingTop", request.PaddingTop),
+            new SqlParameter("@paddingBottom", request.PaddingBottom),
+            new SqlParameter("@letterHeadFilePath", letterHeadFilePath ?? (object)DBNull.Value),
+            new SqlParameter("@userId", globalValues.userId),
+            new SqlParameter("@IpAddress", globalValues.ipAddress),
+            new SqlParameter("@Result", SqlDbType.Int) { Direction = ParameterDirection.Output }
+                };
+
+                long result = _sqlHelper.RunProcedureInsert("IU_LabReportLetterHeadMaster", parameters);
+
+                // Clear cache for this branch and type
+                string allCacheKey = "_LabReportLetterHead_All";
+                _distributedCache.Remove(allCacheKey);
+                _log.Info($"Cleared cache for keys: {allCacheKey}");
+
+                if (result == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Lab Report Letter Head already exists for BranchId={request.BranchId}, TypeId={request.TypeId}");
+                    return ServiceResult<LabReportLetterHeadResponse>.Failure(
+                        alert.Type,
+                        "Letter Head configuration already exists for this branch and type",
+                        409
+                    );
+                }
+
+                if (result > 0)
+                {
+                    var responseData = new LabReportLetterHeadResponse
+                    {
+                        Id = (int)result,
+                        LetterHeadFilePath = letterHeadFilePath
+                    };
+
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.Id == 0 ? "DATA_SAVED_SUCCESSFULLY" : "DATA_UPDATED_SUCCESSFULLY"
+                    );
+
+                    _log.Info($"Lab Report Letter Head {(request.Id == 0 ? "created" : "updated")} successfully. Id={result}");
+
+                    return ServiceResult<LabReportLetterHeadResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        request.Id == 0 ? 201 : 200
+                    );
+                }
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_FAILED");
+                _log.Error($"Lab Report Letter Head operation failed. Result={result}");
+                return ServiceResult<LabReportLetterHeadResponse>.Failure(
+                    alert1.Type,
+                    alert1.Message,
+                    500
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<LabReportLetterHeadResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<LabReportLetterHeadMaster>> GetLabReportLetterHeadList()
+        {
+            try
+            {
+                _log.Info("GetLabReportLetterHeadList called.");
+
+                string cacheKey = "_LabReportLetterHead_All";
+
+                // Try to get data from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<LabReportLetterHeadMaster> letterHeads;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"LabReportLetterHead data retrieved from cache. Key={cacheKey}");
+                    letterHeads = System.Text.Json.JsonSerializer.Deserialize<List<LabReportLetterHeadMaster>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"LabReportLetterHead cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_getLabReportLetterHeadMasterList",
+                        CommandType.StoredProcedure
+                    );
+
+                    letterHeads = dataTable?.AsEnumerable().Select(row => new LabReportLetterHeadMaster
+                    {
+                        Id = row.Field<int>("Id"),
+                        BranchId = row.Field<int>("BranchId"),
+                        BranchName = row.Field<string>("BranchName") ?? string.Empty,
+                        TypeId = row.Field<int>("TypeId"),
+                        TypeName = row.Field<string>("TypeName") ?? string.Empty,
+                        PaddingLeft = row.Field<int>("PaddingLeft"),
+                        PaddingRight = row.Field<int>("PaddingRight"),
+                        PaddingTop = row.Field<int>("PaddingTop"),
+                        PaddingBottom = row.Field<int>("PaddingBottom"),
+                        LetterHeadFilePath = row.Field<string>("LetterHeadFilePath") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive")
+                    }).ToList() ?? new List<LabReportLetterHeadMaster>();
+
+                    // Store in cache permanently
+                    if (letterHeads.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(letterHeads);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"LabReportLetterHead data cached permanently. Key={cacheKey}, Count={letterHeads.Count}");
+                    }
+                }
+
+                if (!letterHeads.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info("No lab report letter heads found");
+                    return ServiceResult<IEnumerable<LabReportLetterHeadMaster>>.Failure(
+                        alert.Type,
+                        "No letter head configurations found",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {letterHeads.Count} lab report letter head(s) from cache");
+
+                return ServiceResult<IEnumerable<LabReportLetterHeadMaster>>.Success(
+                    letterHeads,
+                    "Info",
+                    $"{letterHeads.Count} letter head(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<LabReportLetterHeadMaster>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<string> DeleteLetterHeadMaster(int id, AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"DeleteLetterHeadMaster called. Id={id}");
+
+                if (id <= 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    _log.Warn("Invalid Id provided for letter head deletion.");
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        "Id must be greater than 0",
+                        400
+                    );
+                }
+
+                var result = _sqlHelper.DML(
+                    "D_DeleteLetterHeadMasterById",
+                    CommandType.StoredProcedure,
+                    new { @id = id }
+                );
+
+                // Clear cache for this branch and type
+                string allCacheKey = "_LabReportLetterHead_All";
+                _distributedCache.Remove(allCacheKey);
+
+                _log.Info($"Cleared cache for LetterHeadMaster after deletion");
+
+                if (result > 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_DELETED_SUCCESSFULLY");
+                    _log.Info($"Letter head deleted successfully. Id={id}");
+                    return ServiceResult<string>.Success(
+                        "Letter head deleted successfully",
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+                else
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Warn($"Letter head not found for Id={id}");
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        "Letter head not found or already deleted",
+                        404
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<string>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
             }
         }
     }
