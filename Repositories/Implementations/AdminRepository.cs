@@ -17,6 +17,11 @@ using Microsoft.Extensions.Caching.Distributed;
 using StackExchange.Redis;
 using System.Configuration;
 using HISWEBAPI.Configuration;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
+using static System.Net.Mime.MediaTypeNames;
+using static System.Runtime.InteropServices.JavaScript.JSType;
+using System.Runtime.ConstrainedExecution;
+using System.Text.RegularExpressions;
 
 namespace HISWEBAPI.Repositories.Implementations
 {
@@ -4399,6 +4404,1221 @@ namespace HISWEBAPI.Repositories.Implementations
                 LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
                 var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
                 return ServiceResult<string>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+
+        public ServiceResult<DoctorSignatureMasterResponse> CreateUpdateDoctorSignatureMaster(
+    DoctorSignatureMasterRequest request,
+    AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdateDoctorSignatureMaster called. Id={request.Id}, BranchId={request.BranchId}, DoctorId={request.DoctorId}");
+
+                string docSignFilePath = null;
+
+                var fileUploadHelper = new Utilities.FileUploadHelper(_configuration);
+
+                // Handle doctor signature file upload if provided
+                if (request.DocSignFile != null && request.DocSignFile.Length > 0)
+                {
+                    _log.Info($"Processing doctor signature file: {request.DocSignFile.FileName}, Size: {request.DocSignFile.Length} bytes");
+
+                    // Upload file to DMS
+                    var (uploadSuccess, filePath, uploadError) = fileUploadHelper.UploadFile(
+                        request.DocSignFile,
+                        "DoctorSignatures"
+                    );
+
+                    if (!uploadSuccess)
+                    {
+                        _log.Error($"Doctor signature file upload failed: {uploadError}");
+                        var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                        return ServiceResult<DoctorSignatureMasterResponse>.Failure(
+                            alert.Type,
+                            $"Doctor signature file upload failed: {uploadError}",
+                            500
+                        );
+                    }
+
+                    docSignFilePath = filePath;
+                    _log.Info($"Doctor signature file uploaded successfully: {docSignFilePath}");
+                }
+
+                // Execute stored procedure
+                SqlParameter[] parameters = new SqlParameter[]
+                {
+            new SqlParameter("@Id", request.Id),
+            new SqlParameter("@hospId", globalValues.hospId),
+            new SqlParameter("@branchId", request.BranchId),
+            new SqlParameter("@DoctorId", request.DoctorId),
+            new SqlParameter("@XSign", request.XSign),
+            new SqlParameter("@YSign", request.YSign),
+            new SqlParameter("@DocSignPath", docSignFilePath ?? (object)DBNull.Value),
+            new SqlParameter("@userId", globalValues.userId),
+            new SqlParameter("@IpAddress", globalValues.ipAddress),
+            new SqlParameter("@Result", SqlDbType.Int) { Direction = ParameterDirection.Output }
+                };
+
+                long result = _sqlHelper.RunProcedureInsert("IU_DoctorSignatureMaster", parameters);
+
+                // Clear cache for all doctor signatures
+                string allCacheKey = "_DoctorSignature_All";
+                _distributedCache.Remove(allCacheKey);
+                _log.Info($"Cleared cache for keys: {allCacheKey}");
+
+                if (result == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Doctor Signature already exists for BranchId={request.BranchId}, DoctorId={request.DoctorId}");
+                    return ServiceResult<DoctorSignatureMasterResponse>.Failure(
+                        alert.Type,
+                        "Signature configuration already exists for this branch and doctor",
+                        409
+                    );
+                }
+
+                if (result > 0)
+                {
+                    var responseData = new DoctorSignatureMasterResponse
+                    {
+                        Id = (int)result,
+                        DocSignPath = docSignFilePath
+                    };
+
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.Id == 0 ? "DATA_SAVED_SUCCESSFULLY" : "DATA_UPDATED_SUCCESSFULLY"
+                    );
+
+                    _log.Info($"Doctor Signature {(request.Id == 0 ? "created" : "updated")} successfully. Id={result}");
+
+                    return ServiceResult<DoctorSignatureMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        request.Id == 0 ? 201 : 200
+                    );
+                }
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_FAILED");
+                _log.Error($"Doctor Signature operation failed. Result={result}");
+                return ServiceResult<DoctorSignatureMasterResponse>.Failure(
+                    alert1.Type,
+                    alert1.Message,
+                    500
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<DoctorSignatureMasterResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<DoctorSignatureMaster>> GetDoctorSignatureMasterList()
+        {
+            try
+            {
+                _log.Info("GetDoctorSignatureMasterList called.");
+
+                string cacheKey = "_DoctorSignature_All";
+
+                // Try to get data from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<DoctorSignatureMaster> doctorSignatures;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"DoctorSignature data retrieved from cache. Key={cacheKey}");
+                    doctorSignatures = System.Text.Json.JsonSerializer.Deserialize<List<DoctorSignatureMaster>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"DoctorSignature cache miss. Fetching data from database. Key={cacheKey}");
+
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_getDoctorSignatureMasterList",
+                        CommandType.StoredProcedure
+                    );
+
+                    doctorSignatures = dataTable?.AsEnumerable().Select(row => new DoctorSignatureMaster
+                    {
+                        Id = row.Field<int>("Id"),
+                        BranchId = row.Field<int>("BranchId"),
+                        BranchName = row.Field<string>("BranchName") ?? string.Empty,
+                        DoctorId = row.Field<int>("DoctorId"),
+                        DoctorName = row.Field<string>("DoctorName") ?? string.Empty,
+                        XSign = row.Field<int>("XSign"),
+                        YSign = row.Field<int>("YSign"),
+                        DocSignPath = row.Field<string>("DocSignPath") ?? string.Empty
+                    }).ToList() ?? new List<DoctorSignatureMaster>();
+
+                    // Store in cache permanently
+                    if (doctorSignatures.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(doctorSignatures);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"DoctorSignature data cached permanently. Key={cacheKey}, Count={doctorSignatures.Count}");
+                    }
+                }
+
+                if (!doctorSignatures.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info("No doctor signatures found");
+                    return ServiceResult<IEnumerable<DoctorSignatureMaster>>.Failure(
+                        alert.Type,
+                        "No signature configurations found",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {doctorSignatures.Count} doctor signature(s) from cache");
+
+                return ServiceResult<IEnumerable<DoctorSignatureMaster>>.Success(
+                    doctorSignatures,
+                    "Info",
+                    $"{doctorSignatures.Count} signature(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<DoctorSignatureMaster>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<string> DeleteDoctorSignatureMaster(int id, AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"DeleteDoctorSignatureMaster called. Id={id}");
+
+                if (id <= 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    _log.Warn("Invalid Id provided for doctor signature deletion.");
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        "Id must be greater than 0",
+                        400
+                    );
+                }
+
+                var result = _sqlHelper.DML(
+                    "D_DeleteDoctorSignatureMasterById",
+                    CommandType.StoredProcedure,
+                    new { @id = id }
+                );
+
+                // Clear cache for all doctor signatures
+                string allCacheKey = "_DoctorSignature_All";
+                _distributedCache.Remove(allCacheKey);
+
+                _log.Info($"Cleared cache for DoctorSignatureMaster after deletion");
+
+                if (result > 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_DELETED_SUCCESSFULLY");
+                    _log.Info($"Doctor signature deleted successfully. Id={id}");
+                    return ServiceResult<string>.Success(
+                        "Doctor signature deleted successfully",
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+                else
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Warn($"Doctor signature not found for Id={id}");
+                    return ServiceResult<string>.Failure(
+                        alert.Type,
+                        "Doctor signature not found or already deleted",
+                        404
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<string>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<BankMasterResponse> CreateUpdateBankMaster(BankMasterRequest request, AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdateBankMaster called. BankId={request.BankId}, BankName={request.BankName}");
+
+                var result = _sqlHelper.DML("IU_BankMaster", CommandType.StoredProcedure, new
+                {
+                    @hospId = globalValues.hospId,
+                    @bankId = request.BankId,
+                    @bankName = request.BankName,
+                    @isActive = request.IsActive,
+                    @userId = globalValues.userId,
+                    @IpAddress = globalValues.ipAddress
+                },
+                new
+                {
+                    result = 0
+                });
+
+                // Clear cache after successful operation
+                _distributedCache.Remove("_BankMaster_All");
+                _log.Info("Cleared BankMaster cache");
+
+                if (result < 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Duplicate bank name: {request.BankName}");
+                    return ServiceResult<BankMasterResponse>.Failure(
+                        alert.Type,
+                        "Bank Name Already Exists",
+                        409
+                    );
+                }
+
+                var responseData = new BankMasterResponse { BankId = result };
+
+                if (request.BankId == 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
+                    _log.Info($"Bank created successfully. BankId={result}");
+                    return ServiceResult<BankMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        201
+                    );
+                }
+                else
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
+                    _log.Info($"Bank updated successfully. BankId={result}");
+                    return ServiceResult<BankMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<BankMasterResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<BankMasterModel>> GetBankList(int? bankId = null, int? isActive = null)
+        {
+            try
+            {
+                _log.Info($"GetBankList called. BankId={bankId?.ToString() ?? "All"}");
+
+                string cacheKey = "_BankMaster_All";
+
+                // Try to get all banks from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<BankMasterModel> allBanks;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"BankMaster data retrieved from cache. Key={cacheKey}");
+                    allBanks = System.Text.Json.JsonSerializer.Deserialize<List<BankMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"BankMaster cache miss. Fetching all data from database. Key={cacheKey}");
+
+                    // Fetch ALL banks from database (NO parameters - SP returns everything)
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetBankList",
+                        CommandType.StoredProcedure
+                    );
+
+                    allBanks = dataTable?.AsEnumerable().Select(row => new BankMasterModel
+                    {
+                        BankId = row.Field<int>("BankId"),
+                        BankName = row.Field<string>("BankName") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive"),
+                        CreatedBy = row.Field<string>("CreatedBy"),
+                        CreatedOn = row.Field<string>("CreatedOn"),
+                        LastModifiedBy = row.Field<string>("LastModifiedBy"),
+                        LastModifiedOn = row.Field<string>("LastModifiedOn")
+                    }).ToList() ?? new List<BankMasterModel>();
+
+                    // Store ALL banks in cache (no expiration)
+                    if (allBanks.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(allBanks);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"All BankMaster data cached permanently. Key={cacheKey}, Count={allBanks.Count}");
+                    }
+                }
+
+                // Filter in memory based on bankId parameter (always from cache)
+                List<BankMasterModel> filteredBanks = allBanks;
+                if (bankId.HasValue)
+                {
+                    _log.Info($"Filtering cached data by BankId: {bankId.Value}");
+                    filteredBanks = filteredBanks.Where(b => b.BankId == bankId.Value).ToList();
+                }
+
+                if (isActive.HasValue)
+                {
+                    _log.Info($"Filtering cached data by IsActive: {isActive.Value}");
+                    filteredBanks = filteredBanks.Where(b => b.IsActive == isActive.Value).ToList();
+                }
+
+
+                if (!filteredBanks.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No banks found for BankId: {bankId?.ToString() ?? "All"}");
+                    return ServiceResult<IEnumerable<BankMasterModel>>.Failure(
+                        alert.Type,
+                        bankId.HasValue
+                            ? $"Bank not found for BankId: {bankId.Value}"
+                            : "No banks found",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {filteredBanks.Count} bank(s) from cache");
+
+                return ServiceResult<IEnumerable<BankMasterModel>>.Success(
+                    filteredBanks,
+                    "Info",
+                    $"{filteredBanks.Count} bank(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<BankMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<BankDetailMasterResponse> CreateUpdateBankDetailMaster(
+    BankDetailMasterRequest request,
+    AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdateBankDetailMaster called. BankId={request.BankId}, BankName={request.BankName}");
+
+                SqlParameter[] parameters = new SqlParameter[]
+                {
+            new SqlParameter("@hospId", globalValues.hospId),
+            new SqlParameter("@BankId", request.BankId),
+            new SqlParameter("@PayeeName", request.PayeeName),
+            new SqlParameter("@PANNumber", request.PANNumber),
+            new SqlParameter("@BankName", request.BankName),
+            new SqlParameter("@BankAccountNumber", request.BankAccountNumber),
+            new SqlParameter("@BankAddress", request.BankAddress ?? (object)DBNull.Value),
+            new SqlParameter("@IFSCCode", request.IFSCCode),
+            new SqlParameter("@PINCode", request.PINCode ?? (object)DBNull.Value),
+            new SqlParameter("@TINNumber", request.TINNumber ?? (object)DBNull.Value),
+            new SqlParameter("@isActive", request.IsActive),
+            new SqlParameter("@userId", globalValues.userId),
+            new SqlParameter("@IpAddress", globalValues.ipAddress),
+            new SqlParameter("@Result", SqlDbType.Int) { Direction = ParameterDirection.Output }
+                };
+
+                long result = _sqlHelper.RunProcedureInsert("IU_BankDetailMaster", parameters);
+
+                // Clear cache after successful operation
+                _distributedCache.Remove("_BankDetailMaster_All");
+                _log.Info("Cleared BankDetailMaster cache");
+
+                if (result == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Duplicate bank name attempted: {request.BankName}");
+                    return ServiceResult<BankDetailMasterResponse>.Failure(
+                        alert.Type,
+                        "Bank name already exists",
+                        409
+                    );
+                }
+
+                if (request.BankId == 0)
+                {
+                    var responseData = new BankDetailMasterResponse { BankId = (int)result };
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
+                    _log.Info($"Bank detail created successfully. BankId={result}");
+                    return ServiceResult<BankDetailMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        201
+                    );
+                }
+                else
+                {
+                    var responseData = new BankDetailMasterResponse { BankId = (int)result };
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
+                    _log.Info($"Bank detail updated successfully. BankId={result}");
+                    return ServiceResult<BankDetailMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        200
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<BankDetailMasterResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<BankDetailMasterModel>> GetBankDetailList(int? bankId = null, int? isActive = null)
+        {
+            try
+            {
+                _log.Info($"GetBankDetailList called. BankId={bankId?.ToString() ?? "All"}, IsActive={isActive?.ToString() ?? "All"}");
+
+                // Single cache key for all bank details
+                string cacheKey = "_BankDetailMaster_All";
+
+                // Try to get all bank details from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<BankDetailMasterModel> allBankDetails;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"BankDetailMaster data retrieved from cache. Key={cacheKey}");
+                    allBankDetails = System.Text.Json.JsonSerializer.Deserialize<List<BankDetailMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"BankDetailMaster cache miss. Fetching all data from database. Key={cacheKey}");
+
+                    // Fetch ALL bank details from database (NO parameters - SP returns everything)
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_GetBankDetailList",
+                        CommandType.StoredProcedure
+                    );
+
+                    allBankDetails = dataTable?.AsEnumerable().Select(row => new BankDetailMasterModel
+                    {
+                        Id = row.Field<int>("ID"),
+                        PayeeName = row.Field<string>("PayeeName") ?? string.Empty,
+                        PANNumber = row.Field<string>("PANNumber") ?? string.Empty,
+                        BankName = row.Field<string>("BankName") ?? string.Empty,
+                        BankAccountNumber = row.Field<string>("BankAccountNumber") ?? string.Empty,
+                        BankAddress = row.Field<string>("BankAddress") ?? string.Empty,
+                        IFSCCode = row.Field<string>("IFSCCode") ?? string.Empty,
+                        PINCode = row.Field<string>("PINCode") ?? string.Empty,
+                        TINNumber = row.Field<string>("TINNumber") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive"),
+                        CreatedBy = row.Field<string>("CreatedBy") ?? string.Empty,
+                        CreatedOn = row.Field<string>("CreatedOn") ?? string.Empty,
+                        LastModifiedBy = row.Field<string>("LastModifiedBy") ?? string.Empty,
+                        LastModifiedOn = row.Field<string>("LastModifiedOn") ?? string.Empty
+                    }).ToList() ?? new List<BankDetailMasterModel>();
+
+                    // Store ALL bank details in cache (no expiration)
+                    if (allBankDetails.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(allBankDetails);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"All BankDetailMaster data cached permanently. Key={cacheKey}, Count={allBankDetails.Count}");
+                    }
+                }
+
+                // Filter in memory based on parameters (always from cache)
+                List<BankDetailMasterModel> filteredBankDetails = allBankDetails;
+
+                // Filter by BankId if provided
+                if (bankId.HasValue)
+                {
+                    _log.Info($"Filtering cached data by BankId: {bankId.Value}");
+                    filteredBankDetails = filteredBankDetails.Where(b => b.Id == bankId.Value).ToList();
+                }
+
+                // Filter by IsActive if provided
+                if (isActive.HasValue)
+                {
+                    _log.Info($"Filtering cached data by IsActive: {isActive.Value}");
+                    filteredBankDetails = filteredBankDetails.Where(b => b.IsActive == isActive.Value).ToList();
+                }
+
+                if (!filteredBankDetails.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No bank details found for BankId={bankId?.ToString() ?? "All"}, IsActive={isActive?.ToString() ?? "All"}");
+                    return ServiceResult<IEnumerable<BankDetailMasterModel>>.Failure(
+                        alert.Type,
+                        bankId.HasValue
+                            ? $"Bank detail not found for BankId: {bankId.Value}"
+                            : "No bank details found",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {filteredBankDetails.Count} bank detail(s) from cache");
+
+                return ServiceResult<IEnumerable<BankDetailMasterModel>>.Success(
+                    filteredBankDetails,
+                    "Info",
+                    $"{filteredBankDetails.Count} bank detail(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<BankDetailMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        #region MRD Room Master
+
+        public ServiceResult<MRDRoomMasterResponse> CreateUpdateMRDRoomMaster(
+            MRDRoomMasterRequest request,
+            AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdateMRDRoomMaster called. RoomId={request.RoomId}, Name={request.Name}");
+
+                var result = _sqlHelper.DML("IU_MRDRoomMaster", CommandType.StoredProcedure, new
+                {
+                    @RoomId = request.RoomId,
+                    @Name = request.Name,
+                    @IsActive = request.IsActive,
+                    @UserId = globalValues.userId,
+                    @IPAddress = globalValues.ipAddress
+                },
+                new
+                {
+                    result = 0
+                });
+
+                int resultValue = Convert.ToInt32(result);
+
+                if (resultValue == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"MRD Room name already exists: {request.Name}");
+                    return ServiceResult<MRDRoomMasterResponse>.Failure(
+                        alert.Type,
+                        "Room name already exists",
+                        409
+                    );
+                }
+
+                if (resultValue > 0)
+                {
+                    var responseData = new MRDRoomMasterResponse { RoomId = resultValue };
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.RoomId == 0 ? "DATA_SAVED_SUCCESSFULLY" : "DATA_UPDATED_SUCCESSFULLY"
+                    );
+
+                    _log.Info($"MRD Room {(request.RoomId == 0 ? "created" : "updated")} successfully. RoomId={resultValue}");
+
+                    return ServiceResult<MRDRoomMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        request.RoomId == 0 ? 201 : 200
+                    );
+                }
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_FAILED");
+                _log.Error($"MRD Room operation failed with result: {resultValue}");
+                return ServiceResult<MRDRoomMasterResponse>.Failure(
+                    alert1.Type,
+                    alert1.Message,
+                    500
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<MRDRoomMasterResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<MRDRoomMasterModel>> GetMRDRoomMaster(
+            int? roomId = 0,
+            int? activeFlag = 0)
+        {
+            try
+            {
+                _log.Info($"GetMRDRoomMaster called. RoomId={roomId?.ToString() ?? "All"}, ActiveFlag={activeFlag?.ToString() ?? "All"}");
+
+                var dataTable = _sqlHelper.GetDataTable(
+                    "S_GetMRDRoomMaster",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        @RoomId = roomId ?? 0,
+                        @ActiveFlag = activeFlag ?? 0
+                    }
+                );
+
+                var rooms = dataTable?.AsEnumerable().Select(row => new MRDRoomMasterModel
+                {
+                    RoomId = row.Field<int>("RoomId"),
+                    Name = row.Field<string>("Name") ?? string.Empty,
+                    IsActive = row.Field<int>("IsActive"),
+                }).ToList() ?? new List<MRDRoomMasterModel>();
+
+                if (!rooms.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info("No MRD rooms found");
+                    return ServiceResult<IEnumerable<MRDRoomMasterModel>>.Failure(
+                        alert.Type,
+                        "No rooms found",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {rooms.Count} MRD room(s)");
+
+                return ServiceResult<IEnumerable<MRDRoomMasterModel>>.Success(
+                    rooms,
+                    "Info",
+                    $"{rooms.Count} room(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<MRDRoomMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        #endregion
+
+        #region MRD Rack Master
+
+        public ServiceResult<MRDRackMasterResponse> CreateUpdateMRDRackMaster(
+            MRDRackMasterRequest request,
+            AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdateMRDRackMaster called. RackId={request.RackId}, RoomId={request.RoomId}, Name={request.Name}");
+
+                var result = _sqlHelper.DML("IU_MRDRackMaster", CommandType.StoredProcedure, new
+                {
+                    @RoomId = request.RoomId,
+                    @RackId = request.RackId,
+                    @Name = request.Name,
+                    @IsActive = request.IsActive,
+                    @UserId = globalValues.userId,
+                    @IPAddress = globalValues.ipAddress,
+                    @AutoCreateShelfs = request.AutoCreateShelfs
+                },
+                new
+                {
+                    result = 0
+                });
+
+                int resultValue = Convert.ToInt32(result);
+
+                if (resultValue == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"MRD Rack name already exists: {request.Name} for RoomId={request.RoomId}");
+                    return ServiceResult<MRDRackMasterResponse>.Failure(
+                        alert.Type,
+                        "Rack name already exists for this room",
+                        409
+                    );
+                }
+
+                if (resultValue > 0)
+                {
+                    var responseData = new MRDRackMasterResponse { RackId = resultValue };
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.RackId == 0 ? "DATA_SAVED_SUCCESSFULLY" : "DATA_UPDATED_SUCCESSFULLY"
+                    );
+
+                    _log.Info($"MRD Rack {(request.RackId == 0 ? "created" : "updated")} successfully. RackId={resultValue}");
+
+                    return ServiceResult<MRDRackMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        request.RackId == 0 ? 201 : 200
+                    );
+                }
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_FAILED");
+                _log.Error($"MRD Rack operation failed with result: {resultValue}");
+                return ServiceResult<MRDRackMasterResponse>.Failure(
+                    alert1.Type,
+                    alert1.Message,
+                    500
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<MRDRackMasterResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<MRDRackMasterModel>> GetMRDRackMaster(
+            int roomId,
+            int? rackId = 0,
+            int? activeFlag = 0)
+        {
+            try
+            {
+                _log.Info($"GetMRDRackMaster called. RoomId={roomId}, RackId={rackId?.ToString() ?? "All"}, ActiveFlag={activeFlag?.ToString() ?? "All"}");
+
+                var dataTable = _sqlHelper.GetDataTable(
+                    "S_GetMRDRackMaster",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        @RackId = rackId ?? 0,
+                        @RoomId = roomId,
+                        @ActiveFlag = activeFlag ?? 0
+                    }
+                );
+
+                var racks = dataTable?.AsEnumerable().Select(row => new MRDRackMasterModel
+                {
+                    RackId = row.Field<int>("RackId"),
+                    RoomId = row.Field<int>("RoomId"),
+                    Name = row.Field<string>("Name") ?? string.Empty,
+                    IsActive = row.Field<int>("IsActive"),
+                }).ToList() ?? new List<MRDRackMasterModel>();
+
+                if (!racks.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No MRD racks found for RoomId={roomId}");
+                    return ServiceResult<IEnumerable<MRDRackMasterModel>>.Failure(
+                        alert.Type,
+                        "No racks found",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {racks.Count} MRD rack(s)");
+
+                return ServiceResult<IEnumerable<MRDRackMasterModel>>.Success(
+                    racks,
+                    "Info",
+                    $"{racks.Count} rack(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<MRDRackMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        #endregion
+
+        #region MRD Shelf Master
+
+        public ServiceResult<MRDShelfMasterResponse> CreateUpdateMRDShelfMaster(
+            MRDShelfMasterRequest request,
+            AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdateMRDShelfMaster called. ShelfId={request.ShelfId}, RoomId={request.RoomId}, RackId={request.RackId}, Name={request.Name}");
+
+                var result = _sqlHelper.DML("IU_MRDShelfmaster", CommandType.StoredProcedure, new
+                {
+                    @ShelfId = request.ShelfId,
+                    @RoomId = request.RoomId,
+                    @RackId = request.RackId,
+                    @Name = request.Name,
+                    @IsActive = request.IsActive,
+                    @UserId = globalValues.userId,
+                    @IPAddress = globalValues.ipAddress
+                },
+                new
+                {
+                    result = 0
+                });
+
+                int resultValue = Convert.ToInt32(result);
+
+                if (resultValue == -1)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"MRD Shelf name already exists: {request.Name} for RackId={request.RackId}, RoomId={request.RoomId}");
+                    return ServiceResult<MRDShelfMasterResponse>.Failure(
+                        alert.Type,
+                        "Shelf name already exists for this rack",
+                        409
+                    );
+                }
+
+                if (resultValue > 0)
+                {
+                    var responseData = new MRDShelfMasterResponse { ShelfId = resultValue };
+                    var alert = _messageService.GetMessageAndTypeByAlertCode(
+                        request.ShelfId == 0 ? "DATA_SAVED_SUCCESSFULLY" : "DATA_UPDATED_SUCCESSFULLY"
+                    );
+
+                    _log.Info($"MRD Shelf {(request.ShelfId == 0 ? "created" : "updated")} successfully. ShelfId={resultValue}");
+
+                    return ServiceResult<MRDShelfMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        alert.Message,
+                        request.ShelfId == 0 ? 201 : 200
+                    );
+                }
+
+                var alert1 = _messageService.GetMessageAndTypeByAlertCode("OPERATION_FAILED");
+                _log.Error($"MRD Shelf operation failed with result: {resultValue}");
+                return ServiceResult<MRDShelfMasterResponse>.Failure(
+                    alert1.Type,
+                    alert1.Message,
+                    500
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<MRDShelfMasterResponse>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<MRDShelfMasterModel>> GetMRDShelfMaster(
+            int roomId,
+            int rackId,
+            int? shelfId = 0,
+            int? activeFlag = 0)
+        {
+            try
+            {
+                _log.Info($"GetMRDShelfMaster called. RoomId={roomId}, RackId={rackId}, ShelfId={shelfId?.ToString() ?? "All"}, ActiveFlag={activeFlag?.ToString() ?? "All"}");
+
+                var dataTable = _sqlHelper.GetDataTable(
+                    "S_GetMRDShelfmaster",
+                    CommandType.StoredProcedure,
+                    new
+                    {
+                        @ShelfId = shelfId ?? 0,
+                        @RackId = rackId,
+                        @RoomId = roomId,
+                        @ActiveFlag = activeFlag ?? 0
+                    }
+                );
+
+                var shelves = dataTable?.AsEnumerable().Select(row => new MRDShelfMasterModel
+                {
+                    ShelfId = row.Field<int>("ShelfId"),
+                    RoomId = row.Field<int>("RoomId"),
+                    RackId = row.Field<int>("RackId"),
+                    Name = row.Field<string>("Name") ?? string.Empty,
+                    IsActive = row.Field<int>("IsActive"),
+                }).ToList() ?? new List<MRDShelfMasterModel>();
+
+                if (!shelves.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No MRD shelves found for RoomId={roomId}, RackId={rackId}");
+                    return ServiceResult<IEnumerable<MRDShelfMasterModel>>.Failure(
+                        alert.Type,
+                        "No shelves found",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {shelves.Count} MRD shelf/shelves");
+
+                return ServiceResult<IEnumerable<MRDShelfMasterModel>>.Success(
+                    shelves,
+                    "Info",
+                    $"{shelves.Count} shelf/shelves retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<MRDShelfMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
+
+        #endregion
+
+
+        public ServiceResult<PatientDocumentMasterResponse> CreateUpdatePatientDocumentMaster(
+    PatientDocumentMasterRequest request,
+    AllGlobalValues globalValues)
+        {
+            try
+            {
+                _log.Info($"CreateUpdatePatientDocumentMaster called. DocumentId={request.DocumentId}, DocumentName={request.DocumentName}");
+
+                var result = _sqlHelper.DML("IU_PatientDocumentMaster", CommandType.StoredProcedure, new
+                {
+                    @hospId = globalValues.hospId,
+                    @documentId = request.DocumentId,
+                    @documentName = request.DocumentName,
+                    @documentCode = request.DocumentCode,
+                    @isActive = request.IsActive,
+                    @userId = globalValues.userId,
+                    @IpAddress = globalValues.ipAddress
+                },
+                new
+                {
+                    result = 0
+                });
+
+                // Clear the single cache key after successful operation
+                _distributedCache.Remove("_PatientDocumentMaster_All");
+                _log.Info("Cleared PatientDocumentMaster cache after create/update operation");
+
+                if (result < 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("RECORD_ALREADY_EXISTS");
+                    _log.Warn($"Duplicate document name attempted: {request.DocumentName}");
+                    return ServiceResult<PatientDocumentMasterResponse>.Failure(
+                        alert.Type,
+                        "Document Name already exists",
+                        409
+                    );
+                }
+
+                var responseData = new PatientDocumentMasterResponse { DocumentId = result };
+
+                if (request.DocumentId == 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_SAVED_SUCCESSFULLY");
+                    _log.Info($"Patient Document created successfully. DocumentId={result}");
+                    return ServiceResult<PatientDocumentMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        "Document saved successfully",
+                        201
+                    );
+                }
+                else
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_UPDATED_SUCCESSFULLY");
+                    _log.Info($"Patient Document updated successfully. DocumentId={result}");
+                    return ServiceResult<PatientDocumentMasterResponse>.Success(
+                        responseData,
+                        alert.Type,
+                        "Document updated successfully",
+                        200
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<PatientDocumentMasterResponse>.Failure(
+                alert.Type,
+                alert.Message,
+                    500
+                );
+            }
+        }
+
+        public ServiceResult<IEnumerable<PatientDocumentMasterModel>> GetPatientDocumentMaster(int? isActive = null)
+        {
+            try
+            {
+                _log.Info($"GetPatientDocumentMaster called. IsActive={isActive?.ToString() ?? "All"}");
+
+                // Always use the same cache key for ALL documents
+                string cacheKey = "_PatientDocumentMaster_All";
+
+                // Try to get ALL documents from cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<PatientDocumentMasterModel> allDocuments;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"PatientDocumentMaster data retrieved from cache. Key={cacheKey}");
+                    allDocuments = System.Text.Json.JsonSerializer.Deserialize<List<PatientDocumentMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"PatientDocumentMaster cache miss. Fetching ALL data from database. Key={cacheKey}");
+
+                    // Fetch ALL documents from database (NO parameters - SP returns everything)
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_PatientDocumentMaster",
+                        CommandType.StoredProcedure
+                    // No parameters - SP returns all documents
+                    );
+
+                    allDocuments = dataTable?.AsEnumerable().Select(row => new PatientDocumentMasterModel
+                    {
+                        DocumentId = row.Field<int>("DocumentId"),
+                        DocumentName = row.Field<string>("DocumentName") ?? string.Empty,
+                        DocumentCode = row.Field<string>("DocumentCode") ?? string.Empty,
+                        IsActive = row.Field<int>("IsActive"),
+                        CreatedBy = row.Field<string>("CreatedBy") ?? string.Empty,
+                        CreatedOn = row.Field<string>("CreatedOn") ?? string.Empty,
+                        LastModifiedBy = row.Field<string>("LastModifiedBy") ?? string.Empty,
+                        LastModifiedOn = row.Field<string>("LastModifiedOn") ?? string.Empty
+                    }).ToList() ?? new List<PatientDocumentMasterModel>();
+
+                    // Store ALL documents in cache (no expiration - permanent until manually cleared)
+                    if (allDocuments.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(allDocuments);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            // No expiration - cache persists until manually cleared
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"All PatientDocumentMaster data cached permanently. Key={cacheKey}, Count={allDocuments.Count}");
+                    }
+                }
+
+                // Filter in memory based on isActive parameter (always from cache)
+                List<PatientDocumentMasterModel> filteredDocuments;
+                if (isActive.HasValue)
+                {
+                    _log.Info($"Filtering cached data by IsActive: {isActive.Value}");
+                    filteredDocuments = allDocuments.Where(d => d.IsActive == isActive.Value).ToList();
+                }
+                else
+                {
+                    _log.Info("Returning all cached documents");
+                    filteredDocuments = allDocuments;
+                }
+
+                if (!filteredDocuments.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No patient documents found for IsActive: {isActive?.ToString() ?? "All"}");
+                    return ServiceResult<IEnumerable<PatientDocumentMasterModel>>.Failure(
+                        alert.Type,
+                        isActive.HasValue
+                            ? $"No patient documents found for IsActive: {isActive.Value}"
+                            : "No patient documents found",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {filteredDocuments.Count} patient document(s) from cache");
+
+                return ServiceResult<IEnumerable<PatientDocumentMasterModel>>.Success(
+                    filteredDocuments,
+                    "Info",
+                    $"{filteredDocuments.Count} patient document(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<PatientDocumentMasterModel>>.Failure(
                     alert.Type,
                     alert.Message,
                     500

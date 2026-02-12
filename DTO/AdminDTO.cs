@@ -736,7 +736,7 @@ namespace HISWEBAPI.DTO
         [Range(0, 500, ErrorMessage = "PaddingBottom must be between 0 and 500")]
         public int PaddingBottom { get; set; } = 0;
 
-        public IFormFile LetterHeadFile { get; set; }
+        public IFormFile? LetterHeadFile { get; set; }
 
       
     }
@@ -751,5 +751,193 @@ namespace HISWEBAPI.DTO
     {
         [Required(ErrorMessage = "Id is required")]
         public int Id { get; set; }
+    }
+
+    public class DoctorSignatureMasterRequest
+    {
+        public int Id { get; set; } = 0;
+
+        [Required(ErrorMessage = "BranchId is required")]
+        [Range(0, int.MaxValue, ErrorMessage = "BranchId must be greater than or equal to 0")]
+        public int BranchId { get; set; }
+
+        [Required(ErrorMessage = "DoctorId is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "DoctorId must be greater than 0")]
+        public int DoctorId { get; set; }
+
+        [Range(0, 1000, ErrorMessage = "XSign must be between 0 and 1000")]
+        public int XSign { get; set; } = 0;
+
+        [Range(0, 1000, ErrorMessage = "YSign must be between 0 and 1000")]
+        public int YSign { get; set; } = 0;
+
+        public IFormFile? DocSignFile { get; set; }
+    }
+
+    public class DoctorSignatureMasterResponse
+    {
+        public int Id { get; set; }
+        public string DocSignPath { get; set; }
+    }
+
+    public class DeleteDoctorSignatureRequest
+    {
+        [Required(ErrorMessage = "Id is required")]
+        public int Id { get; set; }
+    }
+
+    public class BankMasterRequest
+    {
+        public int BankId { get; set; } = 0;
+
+        [Required(ErrorMessage = "Bank name is required")]
+        [StringLength(256, ErrorMessage = "Bank name cannot exceed 256 characters")]
+        public string BankName { get; set; }
+
+        [Required(ErrorMessage = "IsActive is required")]
+        public int IsActive { get; set; }
+    }
+
+    public class BankMasterResponse
+    {
+        public int BankId { get; set; }
+    }
+
+    public class BankDetailMasterRequest
+    {
+        public int BankId { get; set; } = 0;
+
+        [Required(ErrorMessage = "Payee name is required")]
+        [StringLength(256, ErrorMessage = "Payee name cannot exceed 256 characters")]
+        public string PayeeName { get; set; }
+
+        [Required(ErrorMessage = "PAN number is required")]
+        [StringLength(20, ErrorMessage = "PAN number cannot exceed 20 characters")]
+        [RegularExpression(@"^[A-Z]{5}[0-9]{4}[A-Z]{1}$", ErrorMessage = "Invalid PAN number format")]
+        public string PANNumber { get; set; }
+
+        [Required(ErrorMessage = "Bank name is required")]
+        [StringLength(256, ErrorMessage = "Bank name cannot exceed 256 characters")]
+        public string BankName { get; set; }
+
+        [Required(ErrorMessage = "Bank account number is required")]
+        [StringLength(20, ErrorMessage = "Bank account number cannot exceed 20 characters")]
+        public string BankAccountNumber { get; set; }
+
+        [Required(ErrorMessage = "Bank address is required")]
+        [StringLength(256, ErrorMessage = "Bank address cannot exceed 256 characters")]
+        public string BankAddress { get; set; }
+
+        [Required(ErrorMessage = "IFSC code is required")]
+        [StringLength(100, ErrorMessage = "IFSC code cannot exceed 100 characters")]
+        [RegularExpression(@"^[A-Z]{4}0[A-Z0-9]{6}$", ErrorMessage = "Invalid IFSC code format")]
+        public string IFSCCode { get; set; }
+
+        [Required(ErrorMessage = "PIN code is required")]
+        [StringLength(10, ErrorMessage = "PIN code cannot exceed 10 characters")]
+        [RegularExpression(@"^\d{6}$", ErrorMessage = "PIN code must be 6 digits")]
+        public string PINCode { get; set; }
+
+        [Required(ErrorMessage = "TIN number is required")]
+        [StringLength(20, ErrorMessage = "TIN number cannot exceed 20 characters")]
+        public string TINNumber { get; set; }
+
+        [Required(ErrorMessage = "IsActive is required")]
+        public int IsActive { get; set; }
+    }
+
+    public class BankDetailMasterResponse
+    {
+        public int BankId { get; set; }
+    }
+
+    // MRD Room Master DTOs
+    public class MRDRoomMasterRequest
+    {
+        public int RoomId { get; set; } = 0;
+
+        [Required(ErrorMessage = "Room name is required")]
+        [StringLength(256, ErrorMessage = "Room name cannot exceed 256 characters")]
+        public string Name { get; set; }
+
+        [Required(ErrorMessage = "IsActive is required")]
+        public int IsActive { get; set; }
+    }
+
+    public class MRDRoomMasterResponse
+    {
+        public int RoomId { get; set; }
+    }
+
+    // MRD Rack Master DTOs
+    public class MRDRackMasterRequest
+    {
+        public int RackId { get; set; } = 0;
+
+        [Required(ErrorMessage = "RoomId is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "RoomId must be greater than 0")]
+        public int RoomId { get; set; }
+
+        [Required(ErrorMessage = "Rack name is required")]
+        [StringLength(256, ErrorMessage = "Rack name cannot exceed 256 characters")]
+        public string Name { get; set; }
+
+        [Required(ErrorMessage = "IsActive is required")]
+        public int IsActive { get; set; }
+
+        [Range(0, 100, ErrorMessage = "AutoCreateShelfs must be between 0 and 100")]
+        public int AutoCreateShelfs { get; set; } = 0;
+    }
+
+    public class MRDRackMasterResponse
+    {
+        public int RackId { get; set; }
+    }
+
+    // MRD Shelf Master DTOs
+    public class MRDShelfMasterRequest
+    {
+        public int ShelfId { get; set; } = 0;
+
+        [Required(ErrorMessage = "RoomId is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "RoomId must be greater than 0")]
+        public int RoomId { get; set; }
+
+        [Required(ErrorMessage = "RackId is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "RackId must be greater than 0")]
+        public int RackId { get; set; }
+
+        [Required(ErrorMessage = "Shelf name is required")]
+        [StringLength(256, ErrorMessage = "Shelf name cannot exceed 256 characters")]
+        public string Name { get; set; }
+
+        [Required(ErrorMessage = "IsActive is required")]
+        public int IsActive { get; set; }
+    }
+
+    public class MRDShelfMasterResponse
+    {
+        public int ShelfId { get; set; }
+    }
+
+    public class PatientDocumentMasterRequest
+    {
+        public int DocumentId { get; set; } = 0;
+
+        [Required(ErrorMessage = "Document name is required")]
+        [StringLength(256, ErrorMessage = "Document name cannot exceed 256 characters")]
+        public string DocumentName { get; set; }
+
+        [Required(ErrorMessage = "Document code is required")]
+        [StringLength(20, ErrorMessage = "Document code cannot exceed 20 characters")]
+        public string DocumentCode { get; set; }
+
+        [Required(ErrorMessage = "IsActive is required")]
+        public int IsActive { get; set; }
+    }
+
+    public class PatientDocumentMasterResponse
+    {
+        public int DocumentId { get; set; }
     }
 }

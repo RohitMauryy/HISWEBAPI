@@ -412,6 +412,11 @@ namespace HISWEBAPI.Data.Helpers
             }
         }
 
+        SqlConnection? ICustomSqlHelper.GetConnectionString()
+        {
+            throw new NotImplementedException();
+        }
+
         #endregion
     }
 }

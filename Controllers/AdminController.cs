@@ -12,6 +12,8 @@ using HISWEBAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using HISWEBAPI.Repositories.Implementations;
 using HISWEBAPI.Configuration;
+using MimeKit;
+using System.Net;
 
 namespace HISWEBAPI.Controllers
 {
@@ -2227,5 +2229,692 @@ namespace HISWEBAPI.Controllers
                 data = serviceResult.Data
             });
         }
+
+        [HttpPost("createUpdateDoctorSignatureMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateDoctorSignatureMaster([FromForm] DoctorSignatureMasterRequest request)
+        {
+            _log.Info($"CreateUpdateDoctorSignatureMaster called. Id={request.Id}, BranchId={request.BranchId}, DoctorId={request.DoctorId}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for doctor signature insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Validate BranchId
+            if (request.BranchId < 0)
+            {
+                _log.Warn("Invalid BranchId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "BranchId must be greater than or equal to 0",
+                    errors = new { branchId = request.BranchId }
+                });
+            }
+
+            // Validate DoctorId
+            if (request.DoctorId <= 0)
+            {
+                _log.Warn("Invalid DoctorId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "DoctorId must be greater than 0",
+                    errors = new { doctorId = request.DoctorId }
+                });
+            }
+
+            // Validate file upload for new records (Id = 0)
+            if (request.Id == 0 && (request.DocSignFile == null || request.DocSignFile.Length == 0))
+            {
+                _log.Warn("Doctor signature file is required for new records.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "Doctor signature file is required for new signature configuration",
+                    errors = new { docSignFile = "Required" }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdateDoctorSignatureMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Doctor signature operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"Doctor signature operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getDoctorSignatureMasterList")]
+        [Authorize]
+        public IActionResult GetDoctorSignatureMasterList()
+        {
+            _log.Info("GetDoctorSignatureMasterList called.");
+
+            var serviceResult = _adminRepository.GetDoctorSignatureMasterList();
+
+            if (serviceResult.Result)
+                _log.Info($"Doctor signatures fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No doctor signatures found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpPatch("deleteDoctorSignatureMaster")]
+        [Authorize]
+        public IActionResult DeleteDoctorSignatureMaster([FromQuery] int id)
+        {
+            _log.Info($"DeleteDoctorSignatureMaster API called. Id={id}");
+
+            if (id <= 0)
+            {
+                _log.Warn("Invalid Id provided for doctor signature deletion.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "Id must be greater than 0",
+                    errors = new { id }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.DeleteDoctorSignatureMaster(id, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Doctor signature deleted successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"Doctor signature deletion failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpPost("createUpdateBankMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateBankMaster([FromBody] BankMasterRequest request)
+        {
+            _log.Info($"CreateUpdateBankMaster called. BankId={request.BankId}, BankName={request.BankName}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for bank insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdateBankMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Bank operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"Bank operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getBankList")]
+        [Authorize]
+        public IActionResult GetBankList([FromQuery] int? bankId = null, [FromQuery] int? isActive = null)
+        {
+            _log.Info($"GetBankList called. BankId={bankId?.ToString() ?? "All"}");
+            // Validate IsActive parameter if provided
+            if (isActive.HasValue && isActive.Value != 0 && isActive.Value != 1)
+            {
+                _log.Warn($"Invalid IsActive parameter: {isActive.Value}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 (Inactive), 1 (Active), or null (All)",
+                    errors = new { isActive }
+                });
+            }
+            var serviceResult = _adminRepository.GetBankList(bankId, isActive);
+
+            if (serviceResult.Result)
+                _log.Info($"Banks fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No banks found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpPost("createUpdateBankDetailMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateBankDetailMaster([FromBody] BankDetailMasterRequest request)
+        {
+            _log.Info($"CreateUpdateBankDetailMaster called. BankId={request.BankId}, BankName={request.BankName}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for bank detail insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdateBankDetailMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Bank detail operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"Bank detail operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getBankDetailList")]
+        [Authorize]
+        public IActionResult GetBankDetailList([FromQuery] int? bankId = null, [FromQuery] int? isActive = null)
+        {
+            _log.Info($"GetBankDetailList called. BankId={bankId?.ToString() ?? "All"}, IsActive={isActive?.ToString() ?? "All"}");
+
+            // Validate IsActive parameter if provided
+            if (isActive.HasValue && isActive.Value != 0 && isActive.Value != 1)
+            {
+                _log.Warn($"Invalid IsActive parameter: {isActive.Value}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 (Inactive), 1 (Active), or null (All)",
+                    errors = new { isActive }
+                });
+            }
+
+            var serviceResult = _adminRepository.GetBankDetailList(bankId, isActive);
+
+            if (serviceResult.Result)
+                _log.Info($"Bank details fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No bank details found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        #region MRD Room Master APIs
+
+       
+        [HttpPost("createUpdateMRDRoomMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateMRDRoomMaster([FromBody] MRDRoomMasterRequest request)
+        {
+            _log.Info($"CreateUpdateMRDRoomMaster called. RoomId={request?.RoomId}, Name={request?.Name}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for MRD Room insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Validate IsActive value
+            if (request.IsActive != 0 && request.IsActive != 1)
+            {
+                _log.Warn("Invalid IsActive value provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 or 1",
+                    errors = new { isActive = request.IsActive }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdateMRDRoomMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"MRD Room operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"MRD Room operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+      
+        [HttpGet("getMRDRoomMaster")]
+        [Authorize]
+        public IActionResult GetMRDRoomMaster(
+            [FromQuery] int? roomId = 0,
+            [FromQuery] int? activeFlag = 0)
+        {
+            _log.Info($"GetMRDRoomMaster called. RoomId={roomId?.ToString() ?? "All"}, ActiveFlag={activeFlag?.ToString() ?? "All"}");
+
+            // Validate activeFlag if provided
+            if (activeFlag.HasValue && activeFlag.Value < 0 && activeFlag.Value > 2)
+            {
+                _log.Warn($"Invalid ActiveFlag value: {activeFlag.Value}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "ActiveFlag must be 0 (All), 1 (Active), or 2 (Inactive)",
+                    errors = new { activeFlag }
+                });
+            }
+
+            var serviceResult = _adminRepository.GetMRDRoomMaster(roomId, activeFlag);
+
+            if (serviceResult.Result)
+                _log.Info($"MRD Rooms fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"MRD Rooms fetch failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        #endregion
+
+        #region MRD Rack Master APIs
+
+       
+        [HttpPost("createUpdateMRDRackMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateMRDRackMaster([FromBody] MRDRackMasterRequest request)
+        {
+            _log.Info($"CreateUpdateMRDRackMaster called. RackId={request?.RackId}, RoomId={request?.RoomId}, Name={request?.Name}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for MRD Rack insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Validate IsActive value
+            if (request.IsActive != 0 && request.IsActive != 1)
+            {
+                _log.Warn("Invalid IsActive value provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 or 1",
+                    errors = new { isActive = request.IsActive }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdateMRDRackMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"MRD Rack operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"MRD Rack operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+       
+        [HttpGet("getMRDRackMaster")]
+        [Authorize]
+        public IActionResult GetMRDRackMaster(
+            [FromQuery] int roomId,
+            [FromQuery] int? rackId = 0,
+            [FromQuery] int? activeFlag = 0)
+        {
+            _log.Info($"GetMRDRackMaster called. RoomId={roomId}, RackId={rackId?.ToString() ?? "All"}, ActiveFlag={activeFlag?.ToString() ?? "All"}");
+
+            // Validate roomId
+            if (roomId <= 0)
+            {
+                _log.Warn("Invalid RoomId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "RoomId must be greater than 0",
+                    errors = new { roomId }
+                });
+            }
+
+            // Validate activeFlag if provided
+            if (activeFlag.HasValue && activeFlag.Value < 0 && activeFlag.Value > 2)
+            {
+                _log.Warn($"Invalid ActiveFlag value: {activeFlag.Value}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "ActiveFlag must be 0 (All), 1 (Active), or 2 (Inactive)",
+                    errors = new { activeFlag }
+                });
+            }
+
+            var serviceResult = _adminRepository.GetMRDRackMaster(roomId, rackId, activeFlag);
+
+            if (serviceResult.Result)
+                _log.Info($"MRD Racks fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"MRD Racks fetch failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        #endregion
+
+        #region MRD Shelf Master APIs
+
+        /// <summary>
+        /// Create or Update MRD Shelf Master
+        /// </summary>
+        [HttpPost("createUpdateMRDShelfMaster")]
+        [Authorize]
+        public IActionResult CreateUpdateMRDShelfMaster([FromBody] MRDShelfMasterRequest request)
+        {
+            _log.Info($"CreateUpdateMRDShelfMaster called. ShelfId={request?.ShelfId}, RoomId={request?.RoomId}, RackId={request?.RackId}, Name={request?.Name}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for MRD Shelf insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            // Validate IsActive value
+            if (request.IsActive != 0 && request.IsActive != 1)
+            {
+                _log.Warn("Invalid IsActive value provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 or 1",
+                    errors = new { isActive = request.IsActive }
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdateMRDShelfMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"MRD Shelf operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"MRD Shelf operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        /// <summary>
+        /// Get MRD Shelf Master
+        /// </summary>
+        /// <param name="roomId">Required: Room ID</param>
+        /// <param name="rackId">Required: Rack ID</param>
+        /// <param name="shelfId">Optional: Specific Shelf ID (0 or null for all shelves in the rack)</param>
+        /// <param name="activeFlag">Optional: 0=All, 1=Active only, 2=Inactive only</param>
+        [HttpGet("getMRDShelfMaster")]
+        [Authorize]
+        public IActionResult GetMRDShelfMaster(
+            [FromQuery] int roomId,
+            [FromQuery] int rackId,
+            [FromQuery] int? shelfId = 0,
+            [FromQuery] int? activeFlag = 0)
+        {
+            _log.Info($"GetMRDShelfMaster called. RoomId={roomId}, RackId={rackId}, ShelfId={shelfId?.ToString() ?? "All"}, ActiveFlag={activeFlag?.ToString() ?? "All"}");
+
+            // Validate roomId
+            if (roomId <= 0)
+            {
+                _log.Warn("Invalid RoomId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "RoomId must be greater than 0",
+                    errors = new { roomId }
+                });
+            }
+
+            // Validate rackId
+            if (rackId <= 0)
+            {
+                _log.Warn("Invalid RackId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "RackId must be greater than 0",
+                    errors = new { rackId }
+                });
+            }
+
+            // Validate activeFlag if provided
+            if (activeFlag.HasValue && activeFlag.Value < 0 && activeFlag.Value > 2)
+            {
+                _log.Warn($"Invalid ActiveFlag value: {activeFlag.Value}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "ActiveFlag must be 0 (All), 1 (Active), or 2 (Inactive)",
+                    errors = new { activeFlag }
+                });
+            }
+
+            var serviceResult = _adminRepository.GetMRDShelfMaster(roomId, rackId, shelfId, activeFlag);
+
+            if (serviceResult.Result)
+                _log.Info($"MRD Shelves fetched successfully: {serviceResult.Message}");
+            else
+                _log.Warn($"MRD Shelves fetch failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        #endregion
+
+
+        [HttpPost("createUpdatePatientDocumentMaster")]
+        [Authorize]
+        public IActionResult CreateUpdatePatientDocumentMaster([FromBody] PatientDocumentMasterRequest request)
+        {
+            _log.Info($"CreateUpdatePatientDocumentMaster called. DocumentId={request.DocumentId}, DocumentName={request.DocumentName}");
+
+            if (!ModelState.IsValid)
+            {
+                _log.Warn("Invalid model state for patient document insert/update.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("MODEL_VALIDATION_FAILED");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = alert.Message,
+                    errors = ModelState
+                });
+            }
+
+            var globalValues = GlobalFunctions.GetGlobalValues(HttpContext);
+            var serviceResult = _adminRepository.CreateUpdatePatientDocumentMaster(request, globalValues);
+
+            if (serviceResult.Result)
+                _log.Info($"Patient document operation completed: {serviceResult.Message}");
+            else
+                _log.Warn($"Patient document operation failed: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getPatientDocumentMaster")]
+        [Authorize]
+        public IActionResult GetPatientDocumentMaster([FromQuery] int? isActive = null)
+        {
+            _log.Info($"GetPatientDocumentMaster called. IsActive={isActive?.ToString() ?? "All"}");
+
+            // Validate IsActive parameter if provided
+            if (isActive.HasValue && isActive.Value != 0 && isActive.Value != 1)
+            {
+                _log.Warn($"Invalid IsActive parameter: {isActive.Value}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "IsActive must be 0 (Inactive), 1 (Active), or null (All)",
+                    errors = new { isActive }
+                });
+            }
+
+            var serviceResult = _adminRepository.GetPatientDocumentMaster(isActive);
+
+            if (serviceResult.Result)
+                _log.Info($"Patient documents fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No patient documents found: {serviceResult.Message}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
     }
 }

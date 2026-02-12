@@ -55,6 +55,21 @@ namespace HISWEBAPI.Repositories.Interfaces
         ServiceResult<LabReportLetterHeadResponse> CreateUpdateLabReportLetterHead(LabReportLetterHeadRequest request,AllGlobalValues globalValues);
         ServiceResult<IEnumerable<LabReportLetterHeadMaster>> GetLabReportLetterHeadList();
         ServiceResult<string> DeleteLetterHeadMaster(int id, AllGlobalValues globalValues);
+        ServiceResult<DoctorSignatureMasterResponse> CreateUpdateDoctorSignatureMaster(DoctorSignatureMasterRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<DoctorSignatureMaster>> GetDoctorSignatureMasterList();
+        ServiceResult<string> DeleteDoctorSignatureMaster(int id, AllGlobalValues globalValues);
+        ServiceResult<BankMasterResponse> CreateUpdateBankMaster(BankMasterRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<BankMasterModel>> GetBankList(int? bankId = null, int? isActive = null);
+        ServiceResult<BankDetailMasterResponse> CreateUpdateBankDetailMaster(BankDetailMasterRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<BankDetailMasterModel>> GetBankDetailList(int? bankId = null, int? isActive = null);
+        ServiceResult<MRDRoomMasterResponse> CreateUpdateMRDRoomMaster(MRDRoomMasterRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<MRDRoomMasterModel>> GetMRDRoomMaster(int? roomId = 0, int? activeFlag = 0);
+        ServiceResult<MRDRackMasterResponse> CreateUpdateMRDRackMaster(MRDRackMasterRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<MRDRackMasterModel>> GetMRDRackMaster(int roomId, int? rackId = 0, int? activeFlag = 0);
+        ServiceResult<MRDShelfMasterResponse> CreateUpdateMRDShelfMaster(MRDShelfMasterRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<MRDShelfMasterModel>> GetMRDShelfMaster(int roomId, int rackId, int? shelfId = 0, int? activeFlag = 0);
+        ServiceResult<PatientDocumentMasterResponse> CreateUpdatePatientDocumentMaster(PatientDocumentMasterRequest request, AllGlobalValues globalValues);
+        ServiceResult<IEnumerable<PatientDocumentMasterModel>> GetPatientDocumentMaster(int? isActive = null);
 
 
     }

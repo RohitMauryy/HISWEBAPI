@@ -30,5 +30,6 @@ namespace HISWEBAPI.Data.Helpers
         DataSet RunProcedure(string storedProcName, string tableName);
         long RunProcedureInsert(string storedProcName, IDataParameter[] parameters);
         void RunProcedure(string storedProcName, SqlParameter[] parameters);
+        SqlConnection? GetConnectionString();
     }
 }

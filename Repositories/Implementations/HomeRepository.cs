@@ -760,6 +760,77 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
+        public ServiceResult<LocationByPincodeModel> GetLocationByPincode(int pincode)
+        {
+            try
+            {
+                _log.Info($"GetLocationByPincode called. Pincode={pincode}");
+
+                // Validate pincode format (6 digits)
+                if (pincode < 100000 || pincode > 999999)
+                {
+                    _log.Warn($"Invalid pincode format: {pincode}");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    return ServiceResult<LocationByPincodeModel>.Failure(
+                        alert.Type,
+                        "Pincode must be exactly 6 digits",
+                        400
+                    );
+                }
+
+                // Fetch data from database (no cache)
+                var dataTable = _sqlHelper.GetDataTable(
+                    "S_getLocationByPincode",
+                    CommandType.StoredProcedure,
+                    new { Pincode = pincode }
+                );
+
+                if (dataTable == null || dataTable.Rows.Count == 0)
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No location found for pincode: {pincode}");
+                    return ServiceResult<LocationByPincodeModel>.Failure(
+                        alert.Type,
+                        $"No location found for pincode: {pincode}",
+                        404
+                    );
+                }
+
+                // Map the first row to LocationByPincodeModel
+                var row = dataTable.Rows[0];
+                var location = new LocationByPincodeModel
+                {
+                    CountryId = row.Field<int>("CountryId"),
+                    CountryName = row.Field<string>("CountryName") ?? string.Empty,
+                    StateId = row.Field<int>("StateId"),
+                    StateName = row.Field<string>("StateName") ?? string.Empty,
+                    DistrictId = row.Field<int>("DistrictId"),
+                    DistrictName = row.Field<string>("DistrictName") ?? string.Empty,
+                    CityId = row.Field<int>("CityId"),
+                    CityName = row.Field<string>("CityName") ?? string.Empty,
+                    Pincode = row.Field<int>("Pincode")
+                };
+
+                _log.Info($"Location retrieved successfully for pincode: {pincode}");
+
+                return ServiceResult<LocationByPincodeModel>.Success(
+                    location,
+                    "Info",
+                    "Location retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<LocationByPincodeModel>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
+        }
         public ServiceResult<IEnumerable<InsuranceCompanyModel>> GetAllInsuranceCompanyList()
         {
             try
@@ -1239,6 +1310,127 @@ namespace HISWEBAPI.Repositories.Implementations
                 // Default
                 _ => "application/octet-stream"
             };
+        }
+
+        public ServiceResult<IEnumerable<DoctorMasterModel>> GetDoctorMasterListByBranchId(
+       int branchId,
+       int? departmentId = null,
+       int? specializationId = null,
+       byte? isDoctorUnit = null)
+        {
+            try
+            {
+                _log.Info($"GetDoctorMasterListByBranchId called. BranchId={branchId}, DepartmentId={departmentId?.ToString() ?? "All"}, SpecializationId={specializationId?.ToString() ?? "All"}, IsDoctorUnit={isDoctorUnit?.ToString() ?? "All"}");
+
+                // Validate branchId
+                if (branchId <= 0)
+                {
+                    _log.Warn("Invalid BranchId provided.");
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                    return ServiceResult<IEnumerable<DoctorMasterModel>>.Failure(
+                        alert.Type,
+                        "BranchId must be greater than 0",
+                        400
+                    );
+                }
+
+                // Generate dynamic cache key based on branchId ONLY (cache all doctors for this branch)
+                string cacheKey = $"_DoctorMaster_Branch{branchId}";
+
+                // Try to get data from Redis cache
+                var cachedData = _distributedCache.GetString(cacheKey);
+                List<DoctorMasterModel> allDoctors;
+
+                if (!string.IsNullOrEmpty(cachedData))
+                {
+                    _log.Info($"DoctorMaster data retrieved from cache. Key={cacheKey}");
+                    allDoctors = System.Text.Json.JsonSerializer.Deserialize<List<DoctorMasterModel>>(cachedData);
+                }
+                else
+                {
+                    _log.Info($"DoctorMaster cache miss. Fetching ALL data from database for BranchId={branchId}. Key={cacheKey}");
+
+                    // Fetch ALL doctors for this branch from database (no filtering in SP call)
+                    var dataTable = _sqlHelper.GetDataTable(
+                        "S_getDoctorMasterListByBranchId",
+                        CommandType.StoredProcedure,
+                        new { branchId = branchId }
+                    );
+
+                    allDoctors = dataTable?.AsEnumerable().Select(row => new DoctorMasterModel
+                    {
+                        DoctorId = row.Field<int>("DoctorId"),
+                        Name = row.Field<string>("Name") ?? string.Empty,
+                        SpecializationId = row.Field<int>("SpecializationId"),
+                        DepartmentId = row.Field<int>("DepartmentId"),
+                        IsDoctorUnit = row.Field<byte>("IsDoctorUnit")
+                    }).ToList() ?? new List<DoctorMasterModel>();
+
+                    // Store ALL doctors for this branch in Redis cache (permanent until manually cleared)
+                    if (allDoctors.Any())
+                    {
+                        var serialized = System.Text.Json.JsonSerializer.Serialize(allDoctors);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpiration = null,
+                            SlidingExpiration = null
+                        };
+                        _distributedCache.SetString(cacheKey, serialized, cacheOptions);
+                        _log.Info($"All DoctorMaster data cached permanently. Key={cacheKey}, Count={allDoctors.Count}");
+                    }
+                }
+
+                // Filter in memory based on optional parameters (always from cache)
+                List<DoctorMasterModel> filteredDoctors = allDoctors;
+
+                if (departmentId.HasValue)
+                {
+                    _log.Info($"Filtering cached data by DepartmentId: {departmentId.Value}");
+                    filteredDoctors = filteredDoctors.Where(d => d.DepartmentId == departmentId.Value).ToList();
+                }
+
+                if (specializationId.HasValue)
+                {
+                    _log.Info($"Filtering cached data by SpecializationId: {specializationId.Value}");
+                    filteredDoctors = filteredDoctors.Where(d => d.SpecializationId == specializationId.Value).ToList();
+                }
+
+                if (isDoctorUnit.HasValue)
+                {
+                    _log.Info($"Filtering cached data by IsDoctorUnit: {isDoctorUnit.Value}");
+                    filteredDoctors = filteredDoctors.Where(d => d.IsDoctorUnit == isDoctorUnit.Value).ToList();
+                }
+
+                if (!filteredDoctors.Any())
+                {
+                    var alert = _messageService.GetMessageAndTypeByAlertCode("DATA_NOT_FOUND");
+                    _log.Info($"No doctors found for BranchId={branchId} with applied filters");
+                    return ServiceResult<IEnumerable<DoctorMasterModel>>.Failure(
+                        alert.Type,
+                        $"No doctors found for the specified criteria",
+                        404
+                    );
+                }
+
+                _log.Info($"Retrieved {filteredDoctors.Count} doctor(s) from cache after filtering");
+
+                return ServiceResult<IEnumerable<DoctorMasterModel>>.Success(
+                    filteredDoctors,
+                    "Info",
+                    $"{filteredDoctors.Count} doctor(s) retrieved successfully",
+                    200
+                );
+            }
+            catch (Exception ex)
+            {
+                LogErrors.WriteErrorLog(ex, $"{GetType().Name}.{MethodBase.GetCurrentMethod().Name}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("SERVER_ERROR_FOUND");
+                return ServiceResult<IEnumerable<DoctorMasterModel>>.Failure(
+                    alert.Type,
+                    alert.Message,
+                    500
+                );
+            }
         }
     }
 }

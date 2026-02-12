@@ -58,6 +58,9 @@ public static class DependencyInjection
         services.AddScoped<IHomeRepository, HomeRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IPageConfigRepository, PageConfigRepository>();
+        services.AddScoped<IStoreRepository, StoreRepository>();
+        services.AddScoped<IDoctorRepository, DoctorRepository>();
+
     }
 
     private static void RegisterBusinessServices(IServiceCollection services)

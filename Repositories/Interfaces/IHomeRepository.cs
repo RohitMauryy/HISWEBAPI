@@ -16,11 +16,13 @@ namespace HISWEBAPI.Repositories.Interfaces
         ServiceResult<IEnumerable<DistrictMasterModel>> GetDistrictMaster(int stateId, int? isActive);
         ServiceResult<IEnumerable<CityMasterModel>> GetCityMaster(int districtId, int? isActive);
         ServiceResult<IEnumerable<PincodeMasterModel>> GetPincodeMaster(int cityId, int? isActive);
+        ServiceResult<LocationByPincodeModel> GetLocationByPincode(int pincode);
         ServiceResult<IEnumerable<InsuranceCompanyModel>> GetAllInsuranceCompanyList();
         ServiceResult<IEnumerable<CorporateModel>> GetCorporateListByInsuranceCompanyId(int? insuranceCompanyId, int? isActive);
         ServiceResult<DTO.FileStreamResult> GetFile(string filePath);
         ServiceResult<FileBase64Result> GetFileAsBase64(string filePath);
         ServiceResult<FileExistsResult> CheckFileExists(string filePath);
+        ServiceResult<IEnumerable<DoctorMasterModel>> GetDoctorMasterListByBranchId(int branchId,int? departmentId = null, int? specializationId = null,byte? isDoctorUnit = null);
 
     }
 }

@@ -1,4 +1,5 @@
 ﻿using Microsoft.OpenApi.Models;
+using Swashbuckle.AspNetCore.SwaggerUI;
 
 namespace HISWEBAPI.Configuration;
 
@@ -52,6 +53,13 @@ public static class SwaggerConfiguration
         {
             options.SwaggerEndpoint("./v1/swagger.json", "HISWEBAPI v1");
             options.EnablePersistAuthorization(); // Remember authorization in browser
+
+            options.DocExpansion(DocExpansion.None);        // Keeps all endpoints collapsed
+
+            //options.DefaultModelsExpandDepth(-1);           // Hides schemas section
+            options.DisplayRequestDuration();               // Shows request duration
+            options.EnableFilter();                         // Enables filter/search box
+            options.EnableDeepLinking();                    // Enables deep linking
         });
 
         return app;

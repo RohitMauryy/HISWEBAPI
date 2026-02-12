@@ -354,6 +354,46 @@ namespace HISWEBAPI.Controllers
             });
         }
 
+
+        [HttpGet("getLocationByPincode")]
+        [Authorize]
+        public IActionResult GetLocationByPincode([FromQuery] int pincode)
+        {
+            _log.Info($"GetLocationByPincode called. Pincode={pincode}");
+
+            // Validate pincode format (6 digits)
+            if (pincode < 100000 || pincode > 999999)
+            {
+                _log.Warn($"Invalid pincode format: {pincode}");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "Pincode must be exactly 6 digits",
+                    errors = new { pincode }
+                });
+            }
+
+            var serviceResult = _homeRepository.GetLocationByPincode(pincode);
+
+            if (serviceResult.Result)
+                _log.Info($"Location fetched successfully for pincode: {pincode}");
+            else
+                _log.Warn($"Location fetch failed for pincode: {pincode}");
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+
+
+
         [HttpGet("getAllInsuranceCompanyList")]
         [Authorize]
         public IActionResult GetAllInsuranceCompanyList()
@@ -525,6 +565,49 @@ namespace HISWEBAPI.Controllers
             }
 
             var serviceResult = _homeRepository.CheckFileExists(filePath);
+
+            return StatusCode(serviceResult.StatusCode, new
+            {
+                result = serviceResult.Result,
+                messageType = serviceResult.MessageType,
+                message = serviceResult.Message,
+                data = serviceResult.Data
+            });
+        }
+
+        [HttpGet("getDoctorMasterListByBranchId")]
+        [Authorize]
+        public IActionResult GetDoctorMasterListByBranchId(
+      [FromQuery] int branchId,
+      [FromQuery] int? departmentId = null,
+      [FromQuery] int? specializationId = null,
+      [FromQuery] byte? isDoctorUnit = null)
+        {
+            _log.Info($"GetDoctorMasterListByBranchId called. BranchId={branchId}, DepartmentId={departmentId?.ToString() ?? "All"}, SpecializationId={specializationId?.ToString() ?? "All"}, IsDoctorUnit={isDoctorUnit?.ToString() ?? "All"}");
+
+            if (branchId <= 0)
+            {
+                _log.Warn("Invalid BranchId provided.");
+                var alert = _messageService.GetMessageAndTypeByAlertCode("INVALID_PARAMETER");
+                return BadRequest(new
+                {
+                    result = false,
+                    messageType = alert.Type,
+                    message = "BranchId must be greater than 0",
+                    errors = new { branchId }
+                });
+            }
+
+            var serviceResult = _homeRepository.GetDoctorMasterListByBranchId(
+                branchId,
+                departmentId,
+                specializationId,
+                isDoctorUnit);
+
+            if (serviceResult.Result)
+                _log.Info($"Doctors fetched successfully from cache: {serviceResult.Message}");
+            else
+                _log.Warn($"No doctors found: {serviceResult.Message}");
 
             return StatusCode(serviceResult.StatusCode, new
             {

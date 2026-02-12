@@ -104,4 +104,17 @@ namespace HISWEBAPI.DTO
         public bool Exists { get; set; }
         public string FilePath { get; set; }
     }
+
+    public class GetDoctorMasterRequest
+    {
+        [Required(ErrorMessage = "BranchId is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "BranchId must be greater than 0")]
+        public int BranchId { get; set; }
+
+        public int? DepartmentId { get; set; }
+
+        public int? SpecializationId { get; set; }
+
+        public int? IsDoctorUnit { get; set; }
+    }
 }

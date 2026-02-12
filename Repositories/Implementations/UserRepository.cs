@@ -755,7 +755,6 @@ namespace HISWEBAPI.Repositories.Implementations
             }
         }
 
-        #region Private Helper Methods
 
         private (bool userExists, bool contactMatch, long userId, string registeredContact) ValidateUserForPasswordResetInternal(string userName, string contact)
         {
@@ -1270,6 +1269,9 @@ namespace HISWEBAPI.Repositories.Implementations
                 );
             }
         }
-        #endregion
+
+
+
+
     }
 }

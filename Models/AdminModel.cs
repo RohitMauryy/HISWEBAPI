@@ -271,4 +271,83 @@
 
     }
 
+    public class DoctorSignatureMaster
+    {
+        public int Id { get; set; }
+        public int BranchId { get; set; }
+        public string BranchName { get; set; }
+        public int DoctorId { get; set; }
+        public string DoctorName { get; set; }
+        public int XSign { get; set; }
+        public int YSign { get; set; }
+        public string DocSignPath { get; set; }
+    }
+
+    public class BankMasterModel
+    {
+        public int BankId { get; set; }
+        public string BankName { get; set; }
+        public int IsActive { get; set; }
+        public string CreatedBy { get; set; }
+        public string CreatedOn { get; set; }
+        public string LastModifiedBy { get; set; }
+        public string LastModifiedOn { get; set; }
+    }
+
+    public class BankDetailMasterModel
+    {
+        public int Id { get; set; }
+        public string PayeeName { get; set; }
+        public string PANNumber { get; set; }
+        public string BankName { get; set; }
+        public string BankAccountNumber { get; set; }
+        public string BankAddress { get; set; }
+        public string IFSCCode { get; set; }
+        public string PINCode { get; set; }
+        public string TINNumber { get; set; }
+        public int IsActive { get; set; }
+        public string CreatedBy { get; set; }
+        public string CreatedOn { get; set; }
+        public string LastModifiedBy { get; set; }
+        public string LastModifiedOn { get; set; }
+    }
+
+    // MRD Room Master Models
+    public class MRDRoomMasterModel
+    {
+        public int RoomId { get; set; }
+        public string Name { get; set; }
+        public int IsActive { get; set; }
+    }
+
+    // MRD Rack Master Models
+    public class MRDRackMasterModel
+    {
+        public int RackId { get; set; }
+        public int RoomId { get; set; }
+        public string Name { get; set; }
+        public int IsActive { get; set; }
+    }
+
+    // MRD Shelf Master Models
+    public class MRDShelfMasterModel
+    {
+        public int ShelfId { get; set; }
+        public int RoomId { get; set; }
+        public int RackId { get; set; }
+        public string Name { get; set; }
+        public int IsActive { get; set; }
+    }
+
+    public class PatientDocumentMasterModel
+    {
+        public int DocumentId { get; set; }
+        public string DocumentName { get; set; }
+        public string DocumentCode { get; set; }
+        public int IsActive { get; set; }
+        public string CreatedBy { get; set; }
+        public string CreatedOn { get; set; }
+        public string LastModifiedBy { get; set; }
+        public string LastModifiedOn { get; set; }
+    }
 }
